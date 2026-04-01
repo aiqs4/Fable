@@ -19,7 +19,7 @@ type CustomOptions() =
 type CustomFormatter(options: IOptionsMonitor<CustomOptions>) as this =
     inherit ConsoleFormatter("customName")
 
-    let mutable optionsReloadToken: IDisposable = null
+    let mutable optionsReloadToken: IDisposable | null = null // Unchecked.defaultof<IDisposable>
     let mutable formatterOptions = options.CurrentValue
     do optionsReloadToken <- options.OnChange(fun x -> this.ReloadLoggerOptions(x))
 
@@ -64,7 +64,9 @@ type CustomFormatter(options: IOptionsMonitor<CustomOptions>) as this =
     member private _.ResetColor(textWriter: TextWriter) = textWriter.Write("\x1B[39m\x1B[22m") // reset to default foreground color
 
     interface IDisposable with
-        member _.Dispose() = optionsReloadToken.Dispose()
+        member _.Dispose() =
+            if not (isNull optionsReloadToken) then
+                optionsReloadToken.Dispose()
 
 [<Extension>]
 type ConsoleLoggerExtensions =

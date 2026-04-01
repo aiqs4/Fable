@@ -10,7 +10,6 @@ open FSharp.Compiler.Symbols
 open Fable
 open Fable.Compiler
 open Fable.AST
-open Fable.Transforms
 open Fable.Transforms.State
 open Fable.Compiler
 open Fable.Compiler.ProjectCracker
@@ -39,8 +38,8 @@ module private Util =
         s :> _
 
     let splitVersion (version: string) =
-        match Version.TryParse(version) with
-        | true, v -> v.Major, v.Minor, v.Revision
+        match Version.TryParse(version |> Option.ofObj |> Option.defaultValue "") with
+        | true, v when not (isNull v) -> v.Major, v.Minor, v.Revision
         | _ -> 0, 0, 0
 
     // let checkFableCoreVersion (checkedProject: FSharpCheckProjectResults) =
@@ -54,11 +53,13 @@ module private Util =
     //             // else printfn "Fable.Core version matches"
 
     let formatException file ex =
-        let rec innerStack (ex: Exception) =
-            if isNull ex.InnerException then
-                ex.StackTrace
-            else
-                innerStack ex.InnerException
+        let rec innerStack (ex: Exception | null) =
+            match Option.ofObj ex with
+            | None -> ""
+            | Some e ->
+                match Option.ofObj e.InnerException with
+                | None -> Option.ofObj e.StackTrace |> Option.defaultValue ""
+                | Some inner -> innerStack inner
 
         let stack = innerStack ex
         $"[ERROR] %s{file}{Log.newLine}%s{ex.Message}{Log.newLine}%s{stack}"
@@ -91,6 +92,7 @@ module private Util =
 
     let getOutPath (cliArgs: CliArgs) pathResolver file =
         match cliArgs.CompilerOptions.Language with
+#if !FABLE_CORE_ONLY
         // For Python we must have an outDir since all compiled files must be inside the same subdir, so if `outDir` is not
         // set we set `outDir` to the directory of the project file being compiled.
         | Python ->
@@ -118,6 +120,7 @@ module private Util =
                         | m -> m.Replace(".", "_")
                     )
                     |> IO.Path.Join
+
 
                 let fileName = fileName |> Pipeline.Python.getTargetPath cliArgs
 
@@ -174,16 +177,19 @@ module private Util =
                 | Some outDir -> IO.Path.Combine(IO.Path.GetFullPath outDir, "src", fileName)
                 | None ->
                     let projDir = IO.Path.GetDirectoryName cliArgs.ProjectFile
-                    IO.Path.Combine(projDir, "src", fileName)
+                    IO.Path.Combine(projDir, "src", fileName + fileExt)
+#endif
 
         | lang ->
             let changeExtension path fileExt =
                 match lang with
+#if !FABLE_CORE_ONLY
                 | JavaScript
                 | TypeScript ->
                     let isInFableModules = Naming.isInFableModules file
 
                     File.changeExtensionButUseDefaultExtensionInFableModules lang isInFableModules path fileExt
+#endif
                 | _ -> Path.ChangeExtension(path, fileExt)
 
             let fileExt = cliArgs.CompilerOptions.FileExtension
@@ -423,9 +429,11 @@ OUTPUT TYPE: {result.OutputType}
         // If targeting Python, make sure users are not compiling the project as library by mistake
         // (imports won't work when running the code)
         match cliArgs.CompilerOptions.Language, result.OutputType with
+#if !FABLE_CORE_ONLY
         | Python, OutputType.Library ->
             Log.always
                 "Compiling project as Library. If you intend to run the code directly, please set OutputType to Exe."
+#endif
         | _ -> ()
 
         let sourceFiles = result.ProjectOptions.SourceFiles |> Array.map Fable.Compiler.File
@@ -598,6 +606,21 @@ and FableCompiler(checker: InteractiveChecker, projCracked: ProjectCracked, fabl
                     | FSharpFileTypeChecked file ->
                         // It seems when there's a pair .fsi/.fs the F# compiler gives the .fsi extension to the implementation file
                         let fileName = file.FileName |> Path.normalizePath |> Path.ensureFsExtension
+
+                        // For Rust and WasmGc, delay last file's compilation so other files can finish compiling.
+                        // WasmGc uses a shared accumulation context (sharedCtxs in WasmGcPipeline) that requires
+                        // all prior files to be fully processed before the last file emits the final module.
+                        let isLastFileDelayLang =
+#if !FABLE_CORE_ONLY
+                            projCracked.CliArgs.CompilerOptions.Language = Rust ||
+#endif
+                            projCracked.CliArgs.CompilerOptions.Language = WasmGc
+                        if
+                            isLastFileDelayLang
+                            && fileName = Array.last state.FilesToCompile
+                            && state.FableFilesCompiledCount < state.FableFilesToCompileExpectedCount - 1
+                        then
+                            do! Async.Sleep(1000)
 
                         Log.verbose (
                             lazy $"Type checked: {IO.Path.GetRelativePath(projCracked.CliArgs.RootDir, file.FileName)}"
@@ -986,6 +1009,7 @@ let private areCompiledFilesUpToDate (state: State) (filesToCompile: string[]) =
         Log.warning ("Cannot check timestamp of compiled files: " + er.Message)
         false
 
+#if !FABLE_CORE_ONLY
 // Library .erl files now live in src/ subdirectories (rebar3 convention).
 let private erlLibSrcRelDir =
     IO.Path.Combine("fable_modules", "fable-library-beam", "src")
@@ -1247,6 +1271,7 @@ exit_with(_) -> ok.
 
         if not (IO.File.Exists(depRebarConfigPath)) || isFableGenerated depRebarConfigPath then
             writeIfChanged depRebarConfigPath (depRebarConfig ())
+#endif
 
 let private runProcessAndForget (cliArgs: CliArgs) (runProc: RunProcess) =
     let workingDir = cliArgs.RootDir
@@ -1279,6 +1304,7 @@ let private checkRunProcess (state: State) (projCracked: ProjectCracked) (compil
 
         let exeFile, args =
             match cliArgs.CompilerOptions.Language, runProc.ExeFile with
+#if !FABLE_CORE_ONLY
             | Python, Naming.placeholder ->
                 let lastFilePath = findLastFileRelativePath ()
                 "python", lastFilePath :: runProc.Args
@@ -1317,6 +1343,7 @@ let private checkRunProcess (state: State) (projCracked: ProjectCracked) (compil
                 @ runProc.Args
             | (JavaScript | TypeScript), exeFile ->
                 File.tryNodeModulesBin workingDir exeFile |> Option.defaultValue exeFile, runProc.Args
+#endif
             | _, exeFile -> exeFile, runProc.Args
 
         if Option.isSome state.Watcher then
@@ -1600,7 +1627,7 @@ let private compilationCycle (state: State) (changes: ISet<string>) =
                                 return 0
                     | _ -> return 0
                 }
-
+#if !FABLE_CORE_ONLY
             // Generate rebar3 scaffold for BEAM target after successful compilation
             if cliArgs.CompilerOptions.Language = Beam && not hasError then
                 // The last source file is the entry point of a Fable program: its module-level
@@ -1611,7 +1638,7 @@ let private compilationCycle (state: State) (changes: ISet<string>) =
                     |> fun f -> Pipeline.Beam.moduleName cliArgs f.NormalizedFullPath
 
                 generateBeamScaffold cliArgs entryModule
-
+#endif
             // Run process
             let exitCode, state =
                 if hasError then

@@ -191,6 +191,7 @@ let argLanguage (args: CliArgs) =
     |> Option.map (fun lang ->
 
         match lang.ToLowerInvariant() with
+#if !FABLE_CORE_ONLY
         | "js"
         | "javascript" -> Ok JavaScript
         | "ts"
@@ -203,6 +204,9 @@ let argLanguage (args: CliArgs) =
         | "rust" -> Ok Rust
         | "beam"
         | "erlang" -> Ok Beam
+#endif
+        | "wasmgc"
+        | "wasm" -> Ok WasmGc
         | unknown ->
             let errorMessage =
                 [
@@ -221,7 +225,11 @@ let argLanguage (args: CliArgs) =
 
             Error errorMessage
     )
+#if !FABLE_CORE_ONLY
     |> Option.defaultValue (Ok JavaScript)
+#else
+    |> Option.defaultValue (Ok WasmGc)
+#endif
 
 type Runner =
     static member Run
@@ -326,6 +334,7 @@ type Runner =
                         if jsTemporal then
                             "FABLE_COMPILER_JAVASCRIPT_TEMPORAL"
                         match language with
+#if !FABLE_CORE_ONLY
                         | Php -> "FABLE_COMPILER_PHP"
                         | Rust -> "FABLE_COMPILER_RUST"
                         | Dart -> "FABLE_COMPILER_DART"
@@ -333,6 +342,8 @@ type Runner =
                         | TypeScript -> "FABLE_COMPILER_TYPESCRIPT"
                         | JavaScript -> "FABLE_COMPILER_JAVASCRIPT"
                         | Beam -> "FABLE_COMPILER_BEAM"
+#endif
+                        | WasmGc -> "FABLE_COMPILER_WASMGC"
                     ]
                 |> List.distinct
 
@@ -477,6 +488,7 @@ let clean (args: CliArgs) language rootDir =
 
 let getStatus =
     function
+#if !FABLE_CORE_ONLY
     | JavaScript
     | TypeScript -> "stable"
     | Python -> "beta"
@@ -484,16 +496,21 @@ let getStatus =
     | Dart -> "beta"
     | Php -> "experimental"
     | Beam -> "alpha"
+#endif
+    | WasmGc -> "experimental"
 
 let getLibPkgVersion =
     function
+#if !FABLE_CORE_ONLY
     | JavaScript -> Some("npm", "@fable-org/fable-library-js", Literals.JS_LIBRARY_VERSION)
     | TypeScript -> Some("npm", "@fable-org/fable-library-ts", Literals.JS_LIBRARY_VERSION)
     | Python
     | Rust
     | Dart
     | Php
-    | Beam -> None
+    | Beam
+#endif
+    | WasmGc -> None
 
 let private logPrelude commands language =
     match commands with

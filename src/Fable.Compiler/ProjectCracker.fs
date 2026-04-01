@@ -257,7 +257,10 @@ let tryGetFablePackage (opts: CrackerOptions) (dllPath: string) =
         els |> Seq.tryFind (fun x -> x.Name.LocalName = localName)
 
     let elements (el: XElement) = el.Elements()
-    let attr name (el: XElement) = el.Attribute(XName.Get name).Value
+    let attr name (el: XElement) =
+        match Option.ofObj (el.Attribute(XName.Get name)) with
+        | Some a -> a.Value
+        | None -> ""
 
     let child localName (el: XElement) =
         let child = el.Elements() |> firstWithName localName
@@ -681,6 +684,7 @@ let copyDirIfDoesNotExist replaceFsprojExt (source: string) (target: string) =
 let getFableLibraryPath (opts: CrackerOptions) (shouldCopy: bool) =
     let buildDir, libDir =
         match opts.FableOptions.Language, opts.FableLib with
+#if !FABLE_CORE_ONLY
         | Dart, None -> "fable-library-dart", "fable_library"
         | Rust, None -> "fable-library-rust", "fable-library-rust"
         | TypeScript, None -> "fable-library-ts", $"fable-library-ts.%s{Literals.VERSION}"
@@ -691,6 +695,8 @@ let getFableLibraryPath (opts: CrackerOptions) (shouldCopy: bool) =
         // fableLibPyPIPackage = "fable-library", fableLibPyPI = "fable_library" (import name)
         | Python, None -> "", Py.Naming.fableLibPyPI
         | Python, Some Py.Naming.fableLibPyPIPackage -> "", Py.Naming.fableLibPyPI
+#endif
+        | WasmGc, None -> "", "."
         // Custom fableLib paths (e.g., --fableLib ./my-lib)
         | _, Some path ->
             if path.StartsWith("./", StringComparison.Ordinal) then
@@ -764,7 +770,9 @@ let copyFableLibraryAndPackageSourcesPy (opts: CrackerOptions) (pkgs: FablePacka
     let shouldCopy =
         match opts.FableLib with
         | None -> false // Default: use PyPI package
+#if !FABLE_CORE_ONLY
         | Some Py.Naming.fableLibPyPIPackage -> false // Explicit PyPI package (--fableLib fable-library)
+#endif
         | Some _ -> true // Custom path: copy library
 
     getFableLibraryPath opts shouldCopy, pkgRefs
@@ -962,7 +970,9 @@ let getFullProjectOpts (resolver: ProjectCrackerResolver) (opts: CrackerOptions)
 
         let fableLibDir, pkgRefs =
             match opts.FableOptions.Language with
+#if !FABLE_CORE_ONLY
             | Python -> copyFableLibraryAndPackageSourcesPy opts mainProj.PackageReferences
+#endif
             | _ -> copyFableLibraryAndPackageSources opts mainProj.PackageReferences
 
         let pkgRefs =

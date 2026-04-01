@@ -276,11 +276,13 @@ let canInlineArg (com: Compiler) identName value body =
         | Value((Null _ | UnitConstant | TypeInfo _ | BoolConstant _ | NumberConstant _ | CharConstant _), _) -> true
         | Value(StringConstant s, _) ->
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Python ->
                 // Only inline short strings if they're referenced at most once,
                 // to avoid duplicating the literal in generated code (which can cause
                 // issues like property access on string literals in Python)
                 s.Length < 100 && countReferencesUntil 2 identName body <= 1
+#endif
             | _ -> s.Length < 100
         | _ ->
             let refCount = countReferencesUntil 2 identName body
@@ -368,7 +370,7 @@ module private Transforms =
                     | _ -> ValueSome([ arg ], body)
             | _ -> ValueNone
 
-    let tryInlineBinding (com: Compiler) (ident: Ident) value letBody =
+    let tryInlineBinding (com: ICompilerCore) (ident: Ident) value letBody =
         let canInlineBinding =
             match value with
             | Import(i, _, _) -> i.IsCompilerGenerated
@@ -427,7 +429,7 @@ module private Transforms =
         | [], restArgExprs -> CurriedApply(body, restArgExprs, t, r)
         | restArgs, _ -> makeLambda restArgs body
 
-    let rec lambdaBetaReduction (com: Compiler) e =
+    let rec lambdaBetaReduction (com: ICompilerCore) e =
         match e with
         | Call(Delegate(args, body, _, _), info, t, r) when List.sameLength args info.Args ->
             let body = visitFromOutsideIn (lambdaBetaReduction com) body
@@ -455,7 +457,7 @@ module private Transforms =
             | _ -> None
         | _ -> None
 
-    let bindingBetaReduction (com: Compiler) e =
+    let bindingBetaReduction (com: ICompilerCore) e =
         // Don't erase user-declared bindings in debug mode for better output
         let isErasingCandidate (ident: Ident) =
             (not com.Options.DebugMode) || ident.IsCompilerGenerated
@@ -505,7 +507,7 @@ module private Transforms =
         | Value(NewOption(Some a, _, _), _), Value(NewOption(Some b, _, _), _) -> tryEqualsAtCompileTime a b
         | _ -> None
 
-    let operationReduction (_com: Compiler) e =
+    let operationReduction (_com: ICompilerCore) e =
         match e with
         // TODO: Other binary operations and numeric types
         | Operation(Binary(AST.BinaryPlus, v1, v2), _, _, _) ->
@@ -617,7 +619,7 @@ module private Transforms =
         | _, Some arity -> Replacements.Api.uncurryExprAtRuntime com arity expr
         | _, None -> expr
 
-    let rec uncurryAnonRecordArg (com: Compiler) expectedFieldNames expectedGenArgs isStruct (expr: Expr) =
+    let rec uncurryAnonRecordArg (com: ICompilerCore) expectedFieldNames expectedGenArgs isStruct (expr: Expr) =
         let needsCurrying =
             expectedGenArgs
             |> List.exists (fun expectedGenArg ->
@@ -689,7 +691,7 @@ module private Transforms =
             | _ -> arg
         )
 
-    let uncurryInnerFunctions (_: Compiler) e =
+    let uncurryInnerFunctions (_: ICompilerCore) e =
         let curryIdentInBody identName (args: Ident list) body =
             curryIdentsInBody (Map [ identName, List.length args ]) body
 
@@ -712,7 +714,7 @@ module private Transforms =
             Delegate(args, fnBody, Some name, Tags.empty) |> makeCall r t info
         | e -> e
 
-    let propagateCurryingThroughLets (_: Compiler) =
+    let propagateCurryingThroughLets (_: ICompilerCore) =
         function
         | Let(ident, value, body) when not ident.IsMutable ->
             let ident, value, arity =
@@ -740,8 +742,7 @@ module private Transforms =
             Body = body
         }
 
-    [<return: Struct>]
-    let (|GetField|_|) (com: Compiler) =
+    let (|GetField|_|) (com: ICompilerCore) =
         function
         | Get(callee, kind, _, r) ->
             match kind with
@@ -759,7 +760,7 @@ module private Transforms =
     let isGetterOrValueWithoutGenerics (memb: MemberFunctionOrValue) =
         memb.IsGetter || (memb.IsValue && List.isEmpty memb.GenericParameters)
 
-    let curryReceivedArgs (com: Compiler) e =
+    let curryReceivedArgs (com: ICompilerCore) e =
         match e with
         // Args passed to a lambda are not uncurried, as it's difficult to do it right, see #2657
         // | Lambda(arg, body, name)
@@ -767,6 +768,7 @@ module private Transforms =
             let args, body = curryArgIdentsAndReplaceInBody args body
             Delegate(args, body, name, tags)
 
+#if !FABLE_CORE_ONLY
         // Uncurry getters for Rust
         | Call(Get(_callee, FieldGet _, _, _), m, _, r) when com.Options.Language = Rust ->
             match Option.bind com.TryGetMember m.MemberRef with
@@ -776,6 +778,7 @@ module private Transforms =
                 | Arity arity when arity > 1 -> Extended(Curry(e, arity), r)
                 | _ -> e
             | _ -> e
+#endif
 
         // Uncurry also values received from getters
         | GetField com (_callee, Arity arity, r) when arity > 1 -> Extended(Curry(e, arity), r)
@@ -810,7 +813,7 @@ module private Transforms =
 
         | e -> e
 
-    let uncurrySendingArgs (com: Compiler) e =
+    let uncurrySendingArgs (com: ICompilerCore) e =
         let uncurryConsArgs args (fields: Field seq) =
             let argTypes = fields |> Seq.map (fun fi -> fi.FieldType) |> Seq.toList
 
@@ -862,7 +865,7 @@ module private Transforms =
             ObjectExpr(members, t, baseCall)
         | e -> e
 
-    let rec uncurryApplications (com: Compiler) e =
+    let rec uncurryApplications (com: ICompilerCore) e =
         let uncurryApply r t applied args uncurriedArity =
             let argsLen = List.length args
 
@@ -901,10 +904,26 @@ module private Transforms =
             | _ -> CurriedApply(applied, args, t, r) |> Some
         | _ -> None
 
+    /// Erases any remaining Extended(Curry(innerExpr, _)) marker by
+    /// unwrapping to innerExpr. Safe for any backend whose function values
+    /// need no runtime currying support — i.e. where a function value is
+    /// already callable with its full argument list directly (WasmGC's
+    /// fixed-arity closures, for example). For JS/TS/Dart/Python this pass
+    /// must NOT be used; uncurrySendingArgs intentionally resolves the
+    /// remaining markers into real runtime-curry wrapper calls instead.
+    let eraseCurryMarkers (_com: ICompilerCore) e =
+        match e with
+        | Extended(Curry(innerExpr, _), _) -> innerExpr
+        | Get(Extended(Curry(innerExpr, _), _), OptionValue, t, r) ->
+            Get(innerExpr, OptionValue, t, r)
+        | Value(NewOption(Some(Extended(Curry(innerExpr, _), _)), t, isStruct), r) ->
+            Value(NewOption(Some(innerExpr), t, isStruct), r)
+        | e -> e
+
 open Transforms
 
 // ATTENTION: Order of transforms matters
-let getTransformations (_com: Compiler) =
+let getTransformations (_com: ICompilerCore) : (#ICompilerCore -> Expr -> Expr) list =
     [ // First apply beta reduction
         fun com e -> visitFromInsideOut (bindingBetaReduction com) e
         fun com e -> visitFromOutsideIn (lambdaBetaReduction com) e
@@ -922,8 +941,21 @@ let getTransformations (_com: Compiler) =
         fun com e -> visitFromOutsideIn (uncurryApplications com) e
     ]
 
-let rec transformDeclaration transformations (com: Compiler) file decl =
-    let transformExpr (com: Compiler) e =
+/// See .fsi for rationale. Mirrors getTransformations' curry-handling
+/// subset (curryReceivedArgs / uncurryInnerFunctions /
+/// propagateCurryingThroughLets / uncurryApplications) plus the new
+/// eraseCurryMarkers catch-all, omitting every JS-specific pass
+/// (beta-reduction is also omitted — it's a pure optimization, not a
+/// correctness requirement, and backends can opt into it separately).
+let getUncurryOnlyTransformations (_com: ICompilerCore) : (ICompilerCore -> Expr -> Expr) list =
+    [   fun com e -> visitFromInsideOut (curryReceivedArgs com) e
+        fun com e -> visitFromInsideOut (uncurryInnerFunctions com) e
+        fun com e -> visitFromInsideOut (propagateCurryingThroughLets com) e
+        fun com e -> visitFromOutsideIn (uncurryApplications com) e
+        fun com e -> visitFromInsideOut (eraseCurryMarkers com) e ]
+
+let rec transformDeclaration transformations (com: ICompilerCore) file decl =
+    let transformExpr (com: ICompilerCore) e =
         List.fold (fun e f -> f com e) e transformations
 
     let transformMemberBody com (m: MemberDecl) =
@@ -1012,7 +1044,7 @@ let rec transformDeclaration transformations (com: Compiler) file decl =
         }
         |> ClassDeclaration
 
-let transformFile (com: Compiler) (file: Fable.AST.Fable.File) =
+let transformFile (com: ICompilerCore) (file: Fable.AST.Fable.File) =
     let transformations = getTransformations com
 
     let newDecls =

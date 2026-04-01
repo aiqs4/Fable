@@ -13,7 +13,7 @@
     <Description>F# to JS compiler</Description>
     <OtherFlags>$(OtherFlags) --nowarn:3536</OtherFlags>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
     <Content Include="..\..\temp\fable-library-js\**\*.*" PackagePath="fable-library-js\" />
     <Content Include="..\..\temp\fable-library-ts\**\*.*" PackagePath="fable-library-ts\" />
     <!-- Python library is distributed via PyPI (pip install fable-library) -->
@@ -31,13 +31,15 @@
     <Compile Include="Main.fs" />
     <Compile Include="CustomLogging.fs" />
     <Compile Include="Entry.fs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
     <Content Include="CHANGELOG.md" />
     <Content Include="Properties\launchSettings.json" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fable.Compiler\Fable.Compiler.fsproj" />
     <ProjectReference Include="..\Fable.Transforms\Fable.Transforms.fsproj" />
-    <ProjectReference Include="../../../../src/Fable.WasmGc.fsproj" />
+    <ProjectReference Include="..\..\..\..\src\WasmGc.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="EasyBuild.PackageReleaseNotes.Tasks" Version="2.1.0">

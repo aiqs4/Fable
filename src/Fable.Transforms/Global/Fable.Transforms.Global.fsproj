@@ -8,6 +8,9 @@
     <DebugType>embedded</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- <PackageReference Include="FSharp.Core"             Version="10.1.203" /> -->
+    <PackageReference Include="FSharp.Core"             Version="10.0.203" />
+    <PackageReference Include="FSharp.Compiler.Service" Version="43.12.203" />
     <!-- <ProjectReference Include="../../Fable.Core/Fable.Core.fsproj" /> -->
     <!-- <ProjectReference Include="../../Fable.Compiler/Fable.Compiler.fsproj" /> -->
     <!-- <ProjectReference Include="../../Fable.Cli/Fable.Cli.fsproj" /> -->

@@ -369,19 +369,21 @@ type FsEnt(maybeAbbrevEnt: FSharpEntity) =
     static member FullName(ent: FSharpEntity) : string =
         let ent = Helpers.nonAbbreviatedDefinition ent
 
-        match tryArrayFullName ent with
-        | Some fullName -> fullName
-        | None when ent.IsNamespace || ent.IsByRef ->
-            match ent.Namespace with
-            | Some ns -> ns + "." + ent.CompiledName
-            | None -> ent.CompiledName
+        let fullName =
+            match tryArrayFullName ent with
+            | Some fullName -> fullName
+            | None when ent.IsNamespace || ent.IsByRef ->
+                match ent.Namespace with
+                | Some ns -> ns + "." + ent.CompiledName
+                | None -> ent.CompiledName
 #if !FABLE_COMPILER
-        | None when ent.IsProvided -> ent.LogicalName
+            | None when ent.IsProvided -> ent.LogicalName
 #endif
-        | None ->
-            match ent.TryFullName with
-            | Some n -> n
-            | None -> ent.LogicalName
+            | None ->
+                match ent.TryFullName with
+                | Some n -> n
+                | None -> ent.LogicalName
+        Helpers.normalizeEntityName fullName
 
     static member Ref(ent: FSharpEntity) : Fable.EntityRef =
         let ent = Helpers.nonAbbreviatedDefinition ent
@@ -395,7 +397,10 @@ type FsEnt(maybeAbbrevEnt: FSharpEntity) =
                 match dllName with
                 // When compiling with netcoreapp target, netstandard only contains redirects
                 // We can find the actual assembly name from the entity qualified name
-                | "netstandard" -> ent.QualifiedName.Split(',').[1].Trim() |> Fable.CoreAssemblyName
+                | "netstandard" ->
+                    ent.QualifiedName
+                    |> Option.map (fun qn -> qn.Split(',').[1].Trim() |> Fable.CoreAssemblyName)
+                    |> Option.defaultValue (Fable.CoreAssemblyName ent.DisplayName) // Fallback to entity name
                 | Naming.fablePrecompile ->
                     let sourcePath = FsEnt.SourcePath ent
                     Fable.PrecompiledLib(sourcePath, Path.normalizePath asmPath)
@@ -584,6 +589,13 @@ type IFableCompiler =
 
 module Helpers =
 
+    let normalizeEntityName (name: string) =
+        if name.StartsWith("WasmGc.Core.", StringComparison.Ordinal) then
+            "Fable.Core." + name.Substring(12)
+        elif name = "WasmGc.Core" then
+            "Fable.Core"
+        else name
+
     let rec nonAbbreviatedDefinition (ent: FSharpEntity) : FSharpEntity =
         if ent.IsFSharpAbbreviation then
             let t = ent.AbbreviatedType
@@ -680,6 +692,7 @@ module Helpers =
 
         let sanitizedName =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Python ->
                 // Python classes are declared with PascalCase names (PEP 8), so entity
                 // references must use the same casing as the declaration
@@ -687,6 +700,7 @@ module Helpers =
                 Fable.Py.Naming.sanitizeIdent Fable.Py.Naming.pyBuiltins.Contains name part
             | Rust -> (entityName |> cleanNameAsRustIdentifier)
             | Dart -> Naming.sanitizeDartIdent (fun _ -> false) name part
+#endif
             | _ -> Naming.sanitizeJsIdent (fun _ -> false) name part
 
         sanitizedName
@@ -733,7 +747,10 @@ module Helpers =
 
                 if ent.IsFSharpModule then
                     match trimRootModule, entName with
+#if !FABLE_CORE_ONLY
+// TODO: this could be useful for WasmGC too
                     | TrimRootModule com, _ when com.Options.Language = Rust -> memb.CompiledName, Naming.NoMemberPart // module prefix for Rust
+#endif
                     | _, s when System.String.IsNullOrEmpty(s) -> memb.CompiledName, Naming.NoMemberPart
                     | _, moduleName -> moduleName, Naming.StaticMemberPart(memb.CompiledName, "")
                 else
@@ -756,6 +773,7 @@ module Helpers =
 
         let name, part =
             match com.Options.Language, memb.DeclaringEntity with
+#if !FABLE_CORE_ONLY
             | Rust, Some ent when memb.IsExtensionMember ->
                 // For Rust, add entity prefix to extension methods
                 cleanNameAsRustIdentifier name, part.Replace(cleanNameAsRustIdentifier)
@@ -765,10 +783,12 @@ module Helpers =
             | Rust, _ ->
                 // for Rust, no entity prefix for other members
                 memberNameAsRustIdentifier name part
+#endif
             | _ -> cleanNameAsJsIdentifier name, part.Replace(cleanNameAsJsIdentifier)
 
         let sanitizedName =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Python ->
                 let name =
                     // Don't snake_case the prefix for [<CompiledName>] members. This is
@@ -793,6 +813,7 @@ module Helpers =
                 |> Fable.Py.Naming.toPythonNaming
             | Rust -> Naming.buildNameWithoutSanitation name part
             | Dart -> Naming.sanitizeDartIdent (fun _ -> false) name part
+#endif
             | _ -> Naming.sanitizeJsIdent (fun _ -> false) name part
 
         let hasOverloadSuffix = not (String.IsNullOrEmpty(part.OverloadSuffix))
@@ -819,9 +840,11 @@ module Helpers =
 
         let sanitizeIdent =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Python -> Fable.Py.Naming.sanitizeIdent
             | Dart -> Naming.sanitizeDartIdent
             | Rust -> Naming.sanitizeRustIdent
+#endif
             | _ -> Naming.sanitizeJsIdent
 
         let name = (name, Naming.NoMemberPart) ||> sanitizeIdent (isUsedName ctx)
@@ -851,7 +874,7 @@ module Helpers =
     let tryFindAttrib fullName (attributes: FSharpAttribute seq) =
         attributes
         |> Seq.tryPick (fun att ->
-            match (nonAbbreviatedDefinition att.AttributeType).TryFullName with
+            match (nonAbbreviatedDefinition att.AttributeType).TryFullName |> Option.map normalizeEntityName with
             | Some fullName2 ->
                 if fullName = fullName2 then
                     Some att
@@ -863,7 +886,7 @@ module Helpers =
     let hasAttrib attFullName (attributes: FSharpAttribute seq) =
         attributes
         |> Seq.exists (fun att ->
-            match (nonAbbreviatedDefinition att.AttributeType).TryFullName with
+            match (nonAbbreviatedDefinition att.AttributeType).TryFullName |> Option.map normalizeEntityName with
             | Some attFullName2 -> attFullName = attFullName2
             | None -> false
         )
@@ -877,7 +900,7 @@ module Helpers =
 
         attributes
         |> Seq.tryPick (fun att ->
-            match (nonAbbreviatedDefinition att.AttributeType).TryFullName with
+            match (nonAbbreviatedDefinition att.AttributeType).TryFullName |> Option.map normalizeEntityName with
             | Some fullName -> Map.tryFind fullName attFullNames
             | None -> None
         )
@@ -905,7 +928,7 @@ module Helpers =
 
         if typ.HasTypeDefinition then
             let tdef = typ.TypeDefinition
-            Some(tdef, tdef.TryFullName)
+            Some(tdef, tdef.TryFullName |> Option.map normalizeEntityName)
         else
             None
 
@@ -1018,6 +1041,7 @@ module Helpers =
     // Mutable public values must be called as functions in JS (see #986)
     let isModuleValueCompiledAsFunction (com: Compiler) (memb: FSharpMemberOrFunctionOrValue) =
         match com.Options.Language with
+#if !FABLE_CORE_ONLY
         | Python
         | JavaScript
         | TypeScript -> memb.IsMutable && isNotPrivate memb
@@ -1025,6 +1049,9 @@ module Helpers =
         | Php
         | Dart
         | Beam -> false
+#endif
+        | WasmGc -> false
+        // | _ -> false
 
     let isModuleValueForCalls com (declaringEntity: FSharpEntity) (memb: FSharpMemberOrFunctionOrValue) =
         declaringEntity.IsFSharpModule
@@ -1087,7 +1114,7 @@ module Helpers =
 
         unionCase.Attributes
         |> Seq.tryPick (fun att ->
-            match att.AttributeType.TryFullName with
+            match att.AttributeType.TryFullName |> Option.map normalizeEntityName with
             | Some Atts.erase -> Some ErasedUnionCase
             | _ -> None
         )
@@ -1095,14 +1122,14 @@ module Helpers =
             match tryDefinition typ with
             | None -> failwith "Union without definition"
             | Some(tdef, fullName) ->
-                match defaultArg fullName tdef.CompiledName with
+                match defaultArg fullName (normalizeEntityName tdef.CompiledName) with
                 | Types.valueOption -> OptionUnion(typ.GenericArguments[0], true)
                 | Types.option -> OptionUnion(typ.GenericArguments[0], false)
                 | Types.list -> ListUnion typ.GenericArguments[0]
                 | _ ->
                     tdef.Attributes
                     |> Seq.tryPick (fun att ->
-                        match att.AttributeType.TryFullName with
+                        match att.AttributeType.TryFullName |> Option.map normalizeEntityName with
                         | Some Atts.erase -> Some(ErasedUnion(tdef, typ.GenericArguments, getCaseRule att))
                         | Some Atts.stringEnum -> Some(StringEnum(tdef, getCaseRule att))
                         | Some Atts.tsTaggedUnion ->
@@ -1118,9 +1145,11 @@ module Helpers =
         )
 
     let tryGetFieldTag (com: Compiler) (memb: FSharpMemberOrFunctionOrValue) =
+#if !FABLE_CORE_ONLY
         if com.Options.Language = Dart && hasAttrib Atts.dartIsConst memb.Attributes then
             Some "const"
         else
+#endif
             None
 
 module Patterns =
@@ -1451,7 +1480,9 @@ module TypeHelpers =
         // In Dart we cannot have the same generic name as a variable or argument, so we add $ to reduce the probabilities of conflict
         // Other solutions would be to add generic names to the name deduplication context or enforce Dart case conventions:
         // Pascal case for types and camel case for variables
+#if !FABLE_CORE_ONLY
         | Dart -> "$" + name
+#endif
         | _ -> name
 
     let resolveGenParam withConstraints ctxTypeArgs (genParam: FSharpGenericParameter) =
@@ -1697,17 +1728,7 @@ module TypeHelpers =
                 | Choice1Of2 t -> t
                 | Choice2Of2 fullName -> makeRuntimeTypeWithMeasure genArgs fullName
             | fullName when tdef.IsMeasure -> Fable.Measure fullName
-            // A `[<StringEnum>]` value *is* a string at runtime, so the type follows the
-            // representation. Not on TypeScript, which keeps the literal-union type, and not on
-            // Beam, where the cases compile to atoms instead of binaries (see
-            // `transformStringEnumAsAtom`) — calling it a string there would make `string x`
-            // erase to a no-op and hand an atom to code expecting a binary.
-            | _ when
-                hasAttrib Atts.stringEnum tdef.Attributes
-                && Compiler.Language <> TypeScript
-                && Compiler.Language <> Beam
-                ->
-                Fable.String
+            | _ when hasAttrib Atts.stringEnum tdef.Attributes && Compiler.Language <> TypeScript -> Fable.String
             | _ ->
                 let genArgs = makeTypeGenArgsWithConstraints withConstraints ctxTypeArgs genArgs
 
@@ -1919,6 +1940,7 @@ module Identifiers =
 
         let sanitizedName =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Python ->
                 let name = Fable.Py.Naming.toPythonNaming name
 
@@ -1928,11 +1950,14 @@ module Identifiers =
                     part
             | Rust -> Naming.sanitizeRustIdent (isUsedName ctx) (name |> cleanNameAsRustIdentifier) part
             | Dart -> Naming.sanitizeDartIdent (isUsedName ctx) name part
+#endif
             | _ -> Naming.sanitizeJsIdent (isUsedName ctx) name part
 
         let isMutable =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Rust -> isMutableOrByRefValue fsRef // non-compiler-generated mutable or byref value
+#endif
             | _ -> fsRef.IsMutable
 
         ctx.UsedNamesInDeclarationScope.Add(sanitizedName) |> ignore
@@ -2198,7 +2223,11 @@ module Util =
             function
             // Disable import of the type decorated by Pojo Attribute unless we are targeting TypeScript
             // See https://github.com/fable-compiler/Fable/issues/4075
-            | AttFullName(Atts.pojoDefinedByConsArgs, att) when com.Options.Language <> TypeScript ->
+            | AttFullName(Atts.pojoDefinedByConsArgs, att)
+#if !FABLE_CORE_ONLY
+              when com.Options.Language <> TypeScript
+#endif
+              ->
                 match att.ConstructorArgs with
                 | [ :? string as customName ] -> GlobalAtt(Some customName) |> Some
                 | _ -> GlobalAtt(None) |> Some
@@ -2295,7 +2324,7 @@ module Util =
     let isErasedOrStringEnumFSharpEntity (ent: FSharpEntity) =
         ent.Attributes
         |> Seq.exists (fun att ->
-            match (nonAbbreviatedDefinition att.AttributeType).TryFullName with
+            match (nonAbbreviatedDefinition att.AttributeType).TryFullName |> Option.map normalizeEntityName with
             | Some(Atts.erase | Atts.stringEnum | Atts.tsTaggedUnion) -> true
             | _ -> false
         )
@@ -2312,15 +2341,16 @@ module Util =
     let isGlobalOrImportedFSharpEntity (ent: FSharpEntity) =
         ent.Attributes
         |> Seq.exists (fun att ->
-            match (nonAbbreviatedDefinition att.AttributeType).TryFullName with
+            match (nonAbbreviatedDefinition att.AttributeType).TryFullName |> Option.map normalizeEntityName with
             | Some(Atts.global_ | Naming.StartsWith Atts.import _) -> true
             | _ -> false
         )
 
+#if !FABLE_CORE_ONLY
     /// Checks if an attribute is a Python class attribute, either directly via [<Py.ClassAttributes>]
     /// or indirectly via a custom attribute marked with [<Py.ClassAttributesTemplate>].
     let private isPyClassAttribute (att: FSharpAttribute) =
-        match att.AttributeType.TryFullName with
+        match att.AttributeType.TryFullName |> Option.map normalizeEntityName with
         | Some Atts.pyClassAttributes -> true
         | _ ->
             // Check if the attribute type itself has ClassAttributesTemplate
@@ -2330,18 +2360,25 @@ module Util =
                 | Some Atts.pyClassAttributesTemplate -> true
                 | _ -> false
             )
+#endif
 
     let isAttachMembersEntity (com: Compiler) (ent: FSharpEntity) =
         not (ent.IsFSharpModule || ent.IsInterface)
         && (
+#if !FABLE_CORE_ONLY
         // com.Options.Language = Php ||
         com.Options.Language = Rust
         || // attach all members for Rust
+#endif
         ent.Attributes
         |> Seq.exists (fun att ->
-            match att.AttributeType.TryFullName with
+            match att.AttributeType.TryFullName |> Option.map normalizeEntityName with
             | Some Atts.attachMembers -> true
+#if !FABLE_CORE_ONLY
             | _ -> isPyClassAttribute att
+#else
+            | _ -> false
+#endif
         ))
 
     let isPojoDefinedByConsArgsEntity (entity: Fable.Entity) =
@@ -2353,7 +2390,7 @@ module Util =
     let isEmittedOrImportedMember (memb: FSharpMemberOrFunctionOrValue) =
         memb.Attributes
         |> Seq.exists (fun att ->
-            match att.AttributeType.TryFullName with
+            match att.AttributeType.TryFullName |> Option.map normalizeEntityName with
             | Some(Naming.StartsWith Atts.emit _ | Atts.global_ | Naming.StartsWith Atts.import _) -> true
             | _ -> false
         )
@@ -2468,6 +2505,7 @@ module Util =
 
         let memberName =
             match com.Options.Language, memb.DeclaringEntity with
+#if !FABLE_CORE_ONLY
             | Rust, Some ent when not memb.IsInstanceMember || memb.IsExtensionMember ->
                 // for Rust, use the namespace for default static interface calls,
                 // for other non-instance calls, prefix with the full entity name
@@ -2476,6 +2514,7 @@ module Util =
                     ns + "." + memberName
                 else
                     ent.FullName + "." + memberName
+#endif
             | _ -> memberName
 
         let file =
@@ -2617,7 +2656,7 @@ module Util =
             (fun ent -> ent.DeclaredInterfaces |> Seq.exists (testInterfaceHierarchy interfaceFullName))
 
     let rec inherits (ent: FSharpEntity) baseFullName =
-        tryFindInTypeHierarchy ent (fun ent -> ent.TryFullName = Some baseFullName)
+        tryFindInTypeHierarchy ent (fun ent -> ent.TryFullName |> Option.map normalizeEntityName = Some baseFullName)
         |> Option.isSome
 
     let tryMangleAttribute (attributes: FSharpAttribute seq) =
@@ -2682,7 +2721,10 @@ module Util =
                 getMangledAbstractMemberName ent memb.CompiledName overloadHash
             else if
                 // use DisplayName for getters/setters (except for Rust)
-                (isGetter || isSetter) && not (com.Options.Language = Rust)
+                (isGetter || isSetter)
+#if !FABLE_CORE_ONLY
+                && not (com.Options.Language = Rust)
+#endif
             then
                 getMemberDisplayName memb
             else
@@ -2732,12 +2774,14 @@ module Util =
             let genParamOpt = ctx.EnclosingMember |> tryFindGenParam entity
 
             match genParamOpt with
+#if !FABLE_CORE_ONLY
             | Some genParam when com.Options.Language = Rust ->
                 // let memberName, _ = getMemberDeclarationName com memb
                 let memberName = memb.CompiledName // TODO: handle overloads
                 let memberName = genParam.FullName + "." + memberName
                 let callee = makeIdentExpr memberName
                 makeCall r typ callInfo callee
+#endif
             | _ ->
                 // TODO: add support for static interface calls in other languages
                 $"Unexpected static interface/override call: %s{memb.FullName}"
@@ -2748,7 +2792,11 @@ module Util =
             let callInfo = { callInfo with ThisArg = None }
             let info = getAbstractMemberInfo com entity memb
 
-            if not info.isMangled && info.isGetter && not (com.Options.Language = Rust) then
+            if not info.isMangled && info.isGetter
+#if !FABLE_CORE_ONLY
+               && not (com.Options.Language = Rust)
+#endif
+            then
                 // Set the field as maybe calculated so it's not displaced by beta reduction
                 let kind =
                     Fable.FieldInfo.Create(
@@ -2759,7 +2807,11 @@ module Util =
                     )
 
                 Fable.Get(callee, kind, typ, r)
-            elif not info.isMangled && info.isSetter && not (com.Options.Language = Rust) then
+            elif not info.isMangled && info.isSetter
+#if !FABLE_CORE_ONLY
+                 && not (com.Options.Language = Rust)
+#endif
+            then
                 let membType = memb.CurriedParameterGroups[0].[0].Type |> makeType Map.empty
                 let arg = callInfo.Args |> List.tryHead |> Option.defaultWith makeNull
                 Fable.Set(callee, Fable.FieldSet(info.name), membType, arg, r)
@@ -2825,7 +2877,7 @@ module Util =
                 // Deal with reraise so we don't need to save caught exception every time
                 match ctx.CaughtException, info.DeclaringEntityFullName, info.CompiledName with
                 | Some ex, "Microsoft.FSharp.Core.Operators", "Reraise" when com.Options.Language <> Dart ->
-                    makeThrow r typ (Fable.IdentExpr ex) |> ValueSome
+                    makeThrow r typ (Fable.IdentExpr ex) |> Some
                 | _ ->
                     // If it's an interface compile the call to the attached member just in case
                     let attachedCall =
@@ -2941,7 +2993,6 @@ module Util =
                 // Skipping it lets the call fall through to the `Inlined` pattern.
                 | None when
                     com.Options.Language <> Rust
-                    && not (isInline memb)
                     && (isAttachMembersEntity com e || isPojoDefinedByConsArgsFSharpEntity e)
                     ->
                     let classExpr = FsEnt.Ref e |> entityIdent com
@@ -3094,7 +3145,9 @@ module Util =
         if
             memb.CurriedParameterGroups.Count <> 1
             || memb.CurriedParameterGroups[0].Count <> (List.length args)
+#if !FABLE_CORE_ONLY
             || com.Options.Language = Rust // keep all optional args for Rust
+#endif
         then
             args
         else
@@ -3235,13 +3288,14 @@ module Util =
 
         | _, Some entity when isModuleValueForCalls com entity memb ->
             let typ = makeType ctx.GenericArgs memb.FullType
-            memberIdent com ctx r typ memb membRef
+            memberIdent com r typ memb membRef
 
         // (optional, Dart only) Call the implicit constructor instead of the mangled one
         | _, Some entity when com.Options.Language = Dart && memb.IsImplicitConstructor ->
             let classExpr = FsEnt.Ref entity |> entityIdent com
             let callInfo = { callInfo with Tags = "new" :: callInfo.Tags }
             makeCall r typ callInfo classExpr
+#endif
         | _ ->
             // If member looks like a value but behaves like a function (has generic args) the type from F# AST is wrong (#2045).
             let typ = makeType ctx.GenericArgs memb.FullType

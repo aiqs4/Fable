@@ -21,7 +21,7 @@ module private MSBuildCrackerResolver =
     let private mkOptionsFullPath (projectFile: FileInfo) (compilerArgs: string array) : string array =
         compilerArgs
         |> Array.map (fun (line: string) ->
-            if not (isFSharpFile line) then
+            if not (isFSharpFile line) || isNull projectFile.DirectoryName then
                 line
             else
                 Path.Combine(projectFile.DirectoryName, line)
@@ -131,8 +131,8 @@ Exception:
 """
 
                 let tf, tfs =
-                    properties.GetProperty("TargetFramework").GetString(),
-                    properties.GetProperty("TargetFrameworks").GetString()
+                    properties.GetProperty("TargetFramework").GetString() |> Option.ofObj |> Option.defaultValue "",
+                    properties.GetProperty("TargetFrameworks").GetString() |> Option.ofObj |> Option.defaultValue ""
 
                 if not (String.IsNullOrWhiteSpace tf) then
                     tf
@@ -197,7 +197,7 @@ Exception:
 
             let options =
                 items.GetProperty("FscCommandLineArgs").EnumerateArray()
-                |> Seq.map (fun arg -> arg.GetProperty("Identity").GetString())
+                |> Seq.map (fun arg -> arg.GetProperty("Identity").GetString() |> Option.ofObj |> Option.defaultValue "")
                 |> Seq.toArray
 
             if Array.isEmpty options then
@@ -211,13 +211,13 @@ Exception:
                 let projectReferences =
                     items.GetProperty("ProjectReference").EnumerateArray()
                     |> Seq.map (fun arg ->
-                        let relativePath = arg.GetProperty("Identity").GetString()
+                        let relativePath = arg.GetProperty("Identity").GetString() |> Option.ofObj |> Option.defaultValue ""
 
                         Path.Combine(fsproj.DirectoryName, relativePath) |> Path.GetFullPath
                     )
                     |> Seq.toArray
 
-                let outputType = properties.GetProperty("OutputType").GetString()
+                let outputType = properties.GetProperty("OutputType").GetString() |> Option.ofObj |> Option.defaultValue ""
 
                 return
                     {

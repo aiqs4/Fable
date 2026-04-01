@@ -1,24 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <!-- <TargetFramework Condition="'$(FableCoreVersion)' == ''">netstandard2.0</TargetFramework>
+    <TargetFramework Condition="'$(FableCoreVersion)' != ''">$(FableCoreVersion)</TargetFramework> -->
+    <TargetFramework>net10.0</TargetFramework>
+    <OtherFlags>$(OtherFlags) --nowarn:3536</OtherFlags>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
+    <Compile Include="Global/Babel.fs" />
+  </ItemGroup>
   <ItemGroup>
-    <Compile Include="Global/Fable.Core.fs" />
+    <ProjectReference Include="Global/Fable.Transforms.Global.fsproj" />
+    <!-- <Compile Include="Global/Fable.Core.fs" />
     <Compile Include="Global/Metadata.fs" />
     <Compile Include="Global/Prelude.fs" />
     <Compile Include="Global/Compiler.fs" />
-    <Compile Include="Global/Naming.fs" />
+    <Compile Include="Global/Naming.fs" /> -->
+  </ItemGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
     <Compile Include="Python/Prelude.fs" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="MonadicTrampoline.fs" />
     <Compile Include="Transforms.Util.fs" />
     <Compile Include="OverloadSuffix.fs" />
     <Compile Include="FSharp2Fable.Util.fs" />
     <Compile Include="ReplacementsInject.fs" />
     <Compile Include="Replacements.Util.fs" />
-    <Compile Include="Printer.fs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
     <Compile Include="Python/Replacements.fs" />
     <Compile Include="Rust/Replacements.fs" />
     <Compile Include="Dart/Replacements.fs" />
     <Compile Include="Beam/Prelude.fs" />
     <Compile Include="Beam/Replacements.fs" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="Replacements.fs" />
     <Compile Include="Replacements.Api.fs" />
     <Compile Include="QuotationEmitter.fs" />
@@ -26,6 +45,36 @@
     <Compile Include="FSharp2Fable.fs" />
     <Compile Include="FableTransforms.fsi" />
     <Compile Include="FableTransforms.fs" />
+    <Compile Include="Printer.fs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
+    <Compile Include="Fable2Babel.fs" />
+    <Compile Include="BabelPrinter.fs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(FableCoreOnly)' != 'true'">
+    <Compile Include="Python/Python.AST.fs" />
+    <Compile Include="Python/Fable2Python.Types.fs" />
+    <Compile Include="Python/Fable2Python.Util.fs" />
+    <Compile Include="Python/Fable2Python.Annotation.fs" />
+    <Compile Include="Python/Fable2Python.Bases.fs" />
+    <Compile Include="Python/Fable2Python.Reflection.fs" />
+    <Compile Include="Python/Fable2Python.Transforms.fs" />
+    <Compile Include="Python/PythonPrinter.fs" />
+    <Compile Include="Python/PythonCompiler.fs" />
+    <Compile Include="Beam/Fable2Beam.Util.fs" />
+    <Compile Include="Beam/Fable2Beam.Reflection.fs" />
+    <Compile Include="Beam/Fable2Beam.fs" />
+    <Compile Include="Beam/ErlangPrinter.fs" />
+    <Compile Include="Php/Php.fs" />
+    <Compile Include="Php/Fable2Php.fs" />
+    <Compile Include="Php/PhpPrinter.fs" />
+    <Compile Include="Dart/Dart.fs" />
+    <Compile Include="Dart/Fable2Dart.fs" />
+    <Compile Include="Dart/DartPrinter.fs" />
+    <Compile Include="Rust/RustPrinter.fs" />
+    <Compile Include="Rust/Fable2Rust.fs" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="State.fs" />
   </ItemGroup>
   <ItemGroup>

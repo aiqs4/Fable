@@ -16,6 +16,12 @@
         <Compile Include="Globbing.fsi" />
         <Compile Include="Globbing.fs" />
         <Compile Include="File.fs" />
+        <!--
+            NEW: InteractiveChecker now lives inside Fable rather than being
+            compiled into the patched FCS build. It must come before
+            ProjectCracker/Library because those reference its type.
+        -->
+        <Compile Include="InteractiveChecker.fs" />
         <Compile Include="ProjectCracker.fsi" />
         <Compile Include="ProjectCracker.fs" />
         <Compile Include="MSBuildCrackerResolver.fs" />
@@ -29,10 +35,40 @@
         <ProjectReference Include="../Fable.Transforms/Babel/Fable.Transforms.Babel.fsproj" PrivateAssets="all" />
     </ItemGroup>
 
+    <!--
+        CHANGED: replaced the three hand-built lib/fcs DLL references with the
+        official NuGet packages.
+
+        Version notes
+        ─────────────
+        FSharp.Compiler.Service version numbers follow the pattern:
+          43.<F#-minor>.<build>
+
+        F# 9  → 43.8.x
+        F# 10 → 43.9.x   (use this for net10 / F# 10)
+        F# 11 → 43.10.x  (use this for net11 / F# 11 preview)
+
+        Pin to a specific build rather than a floating range so that CI is
+        reproducible.  Update the version when you pull in a new F# toolchain.
+    -->
     <ItemGroup>
-        <Reference Include="../../lib/fcs/FSharp.Compiler.Service.dll" />
-        <Reference Include="../../lib/fcs/FSharp.DependencyManager.Nuget.dll" />
-        <Reference Include="../../lib/fcs/FSharp.Core.dll" />
+        <!--
+            FSharp.Core is transitively brought in by FSharp.Compiler.Service.
+            We keep it explicit so we control the version and can set
+            DisableImplicitFSharpCoreReference above.
+        -->
+        <!-- <PackageReference Include="FSharp.Core"             Version="10.1.203" /> -->
+        <PackageReference Include="FSharp.Core"             Version="10.0.300" />
+        <!--
+            The main FCS package.  Includes the compiler, symbol APIs, and the
+            FSharpChecker public surface that InteractiveChecker.fs now uses.
+        -->
+        <PackageReference Include="FSharp.Compiler.Service" Version="43.12.203" />
+        <!--
+            DependencyManager is a separate package in recent FCS releases.
+            It is still needed for script resolution inside FSharpChecker.
+        -->
+        <PackageReference Include="FSharp.DependencyManager.Nuget" Version="37.0.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -46,6 +82,12 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     </ItemGroup>
 
+    <!--
+        Pack the FCS / FSharp.Core DLLs alongside Fable so consumers don't
+        need to pull in FCS themselves.  The paths change because NuGet now
+        places the DLLs in the standard package cache rather than OutputPath.
+        We use the $(Pkgxxx) property that NuGet sets for referenced packages.
+    -->
     <ItemGroup>
         <None Include="$(OutputPath)FSharp.Core.dll" Pack="true" PackagePath="lib/$(TargetFramework)" />
         <None Include="$(OutputPath)FSharp.Compiler.Service.dll" Pack="true" PackagePath="lib/$(TargetFramework)" />

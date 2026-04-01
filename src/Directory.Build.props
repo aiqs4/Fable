@@ -1,4 +1,8 @@
 <Project>
+    <!-- Sucht nach der Directory.Build.props im übergeordneten Ordner -->
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"
+            Condition="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../')) != ''" />
+
     <PropertyGroup>
         <PackageProjectUrl>http://fable.io</PackageProjectUrl>
         <RepositoryUrl>https://github.com/fable-compiler/Fable.git</RepositoryUrl>
@@ -8,6 +12,9 @@
         <PackageTags>fsharp;fable;javascript;f#;js</PackageTags>
         <Authors>Alfonso García-Caro Núñez</Authors>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+        <FableCoreVersion>net10.0</FableCoreVersion>
+        <NoWarn>$(NoWarn);NU1900</NoWarn>
 
         <!-- Symbols are giving errors when publishing, skip for now -->
         <!-- For SourceLink. See: https://github.com/dotnet/sourcelink#using-source-link-in-net-projects -->

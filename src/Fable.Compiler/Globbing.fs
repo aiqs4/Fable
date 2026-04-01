@@ -168,15 +168,13 @@ module Glob =
                     if Path.IsPathRooted input then
                         if input.StartsWith '\\' then
                             failwithf
-                                "Please remove the leading '\\' or '/' and replace them with \
+                                $"Please remove the leading '\\' or '/' and replace them with \
                                        '.\\' or './' if you want to use a relative path. Leading \
-                                       slashes are considered an absolute path (input was '%s')!"
-                                originalInput
+                                       slashes are considered an absolute path (input was '%s{originalInput}')!"
                         else
                             failwithf
-                                "Unknown globbing input '%s', try to use a \
+                                $"Unknown globbing input '%s{originalInput}', try to use a \
                                        relative path and report an issue!"
-                                originalInput
 
                     [], splits |> Array.toSeq
 

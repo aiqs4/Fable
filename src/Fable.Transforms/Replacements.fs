@@ -1814,6 +1814,18 @@ let implementedStringFunctions =
 let getEnumerator com r t expr =
     Helper.LibCall(com, "Util", "getEnumerator", t, [ expr ], ?loc = r)
 
+// WasmGC (and future backends): System.Numerics.BitOperations
+// JS: clz32 is Math.clz32; ctz/popcnt are LibCalls (need polyfill for JS output)
+let bitOperations (com: ICompiler) (ctx: Context) r t (i: CallInfo) (thisArg: Expr option) (args: Expr list) =
+    match i.CompiledName, args with
+    | "LeadingZeroCount", _ ->
+        Helper.GlobalCall("Math", t, args, i.SignatureArgTypes, memb = "clz32", ?loc = r) |> Some
+    | "TrailingZeroCount", _ ->
+        Helper.LibCall(com, "BitOperations", "trailingZeroCount", t, args, i.SignatureArgTypes, ?loc = r) |> Some
+    | "PopCount", _ ->
+        Helper.LibCall(com, "BitOperations", "popCount", t, args, i.SignatureArgTypes, ?loc = r) |> Some
+    | _ -> None
+
 let strings (com: ICompiler) (ctx: Context) r t (i: CallInfo) (thisArg: Expr option) (args: Expr list) =
     match i.CompiledName, thisArg, args with
     | ".ctor", _, fstArg :: _ ->
@@ -4688,6 +4700,7 @@ let private replacedModules =
         [
             "System.Math", operators
             "System.MathF", operators
+            "System.Numerics.BitOperations", bitOperations
             "Microsoft.FSharp.Core.Operators", operators
             "Microsoft.FSharp.Core.Operators.Checked", operators
             "Microsoft.FSharp.Core.Operators.Unchecked", unchecked

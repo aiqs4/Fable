@@ -70,7 +70,7 @@ type Field =
     abstract FieldType: Type
     abstract IsMutable: bool
     abstract IsStatic: bool
-    abstract LiteralValue: obj option
+    abstract LiteralValue: objnull option
     abstract HasDefaultValueAttribute: bool
 
 type UnionCase =
@@ -516,7 +516,7 @@ type NumberValue =
     | Decimal of System.Decimal
 
 type ValueKind =
-    // The AST from F# compiler is a bit inconsistent with ThisValue and BaseValue.
+    // The AST from the F# compiler is a bit inconsistent with ThisValue and BaseValue.
     // ThisValue only appears in constructors and not in instance members (where `this` is passed as first argument)
     // BaseValue can appear both in constructor and instance members (where they're associated to this arg)
     | ThisValue of typ: Type

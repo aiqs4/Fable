@@ -3,11 +3,12 @@
 open System
 open System.IO
 open FSharp.Compiler.CodeAnalysis
-open FSharp.Compiler.SourceCodeServices
 open FSharp.Compiler.Diagnostics
 open Fable
+open Fable.Compiler
 open Fable.Transforms.State
 open Fable.Transforms
+open Fable.Compiler
 open Fable.Compiler.ProjectCracker
 open Fable.Compiler.Util
 
@@ -135,6 +136,7 @@ module CodeServices =
             LogEntry.Make(severity, msg, fileName = er.FileName, range = range, tag = "FSHARP")
         )
 
+#if !FABLE_CORE_ONLY
     let compileFileToJs
         (com: Compiler)
         (pathResolver: PathResolver)
@@ -155,6 +157,7 @@ module CodeServices =
             let! output = writer.ReadContentAsString()
             return output
         }
+#endif
 
     let typeCheckProject
         (sourceReader: SourceReader)
@@ -236,6 +239,7 @@ module CodeServices =
                 }
         }
 
+#if !FABLE_CORE_ONLY
     let compileMultipleFilesToJavaScript
         (pathResolver: PathResolver)
         (cliArgs: CliArgs)
@@ -402,3 +406,4 @@ module CodeServices =
                     Logs = Array.append (getFSharpDiagnostics checkProjectResult.Diagnostics) (Array.concat fableLogs)
                 }
         }
+#endif

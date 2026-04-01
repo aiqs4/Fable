@@ -407,3 +407,9 @@ type CompilerImpl
         member _.AddLog(msg, severity, ?range, ?fileName: string, ?tag: string) =
             LogEntry.Make(severity, msg, ?range = range, ?fileName = fileName, ?tag = tag)
             |> logs.Add
+
+        // ICompilerCore.TryGetPluginHelper:
+        // Constructs the full PluginHelper only when plugins are present.
+        // ToPluginHelper() is the Compiler extension defined in Compiler.fs.
+        member this.TryGetPluginHelper() =
+            Some ((this :> Compiler).ToPluginHelper())

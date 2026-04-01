@@ -87,19 +87,18 @@ type PollingFileWatcher(watchedDirectoryPath, ignoredDirectoryNameRegexes) =
                     | :? DirectoryInfo as subdirInfo -> foreachEntityInDirectory subdirInfo fileAction
                     | _ -> ()
 
-    let rec recordChange (fileInfo: FileSystemInfo) =
-        if
-            not (isNull fileInfo)
-            && not (changes.Contains(fileInfo.Name))
-            && not (fileInfo.FullName.Equals(watchedDirectory.FullName, StringComparison.Ordinal))
-        then
-            changes.Add(fileInfo.FullName) |> ignore
+    let rec recordChange (fileInfoOpt: FileSystemInfo | null) =
+        match Option.ofObj fileInfoOpt with
+        | Some fileInfo ->
+            if not (changes.Contains(fileInfo.Name)) && not (fileInfo.FullName.Equals(watchedDirectory.FullName, StringComparison.Ordinal)) then
+                changes.Add(fileInfo.FullName) |> ignore
 
-            if fileInfo.FullName <> watchedDirectory.FullName then
-                match fileInfo with
-                | :? FileInfo as file -> recordChange (file.Directory)
-                | :? DirectoryInfo as dir -> recordChange (dir.Parent)
-                | _ -> ()
+                if fileInfo.FullName <> watchedDirectory.FullName then
+                    match fileInfo with
+                    | :? FileInfo as file -> recordChange (file.Directory)
+                    | :? DirectoryInfo as dir -> recordChange (dir.Parent)
+                    | _ -> ()
+        | None -> ()
 
     let checkForChangedFiles () =
         changes.Clear()
@@ -244,14 +243,17 @@ type ResetablePollingFileWatcher(fileNameGlobFilters, ignoredDirectoryNameRegexe
             | None -> false // Defaults to EnableRaisingEvents = false to be consistent
 
         let watcherChangeHandler e =
-            let name = Path.GetFileName(e: string) // Should also work for directories
+            let fileName = Path.GetFileName(e: string) |> Option.ofObj  // Should also work for directories
 
-            let matchesFilter =
-                List.isEmpty fileNameGlobFilters
-                || fileNameGlobFilters |> List.exists (fun filter -> Glob.isMatch filter name)
+            match fileName with
+            | None -> ()
+            | Some name ->
+                let matchesFilter =
+                    List.isEmpty fileNameGlobFilters
+                    || fileNameGlobFilters |> List.exists (fun filter -> Glob.isMatch filter name)
 
-            if matchesFilter then
-                onFileChange.Trigger(e)
+                if matchesFilter then
+                     onFileChange.Trigger(e)
 
         newInstance.EnableRaisingEvents <- previousEnableRaisingEvents
 

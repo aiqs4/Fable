@@ -127,6 +127,7 @@ module File =
     let defaultFileExt usesOutDir (language: Fable.Language) =
         let fileExt =
             match language with
+#if !FABLE_CORE_ONLY
             | Fable.TypeScript -> ".ts"
             | Fable.Python -> ".py"
             | Fable.Php -> ".php"
@@ -134,12 +135,19 @@ module File =
             | Fable.Rust -> ".rs"
             | Fable.Beam -> ".erl"
             | Fable.JavaScript -> ".js"
+#endif
+            | Fable.WasmGc -> ".wasm"
 
         match language, usesOutDir with
+#if !FABLE_CORE_ONLY
         | Fable.Python, _ -> fileExt // Extension will always be .py for Python
         | Fable.Beam, _ -> fileExt // Extension will always be .erl for Beam
+#endif
+        | Fable.WasmGc, (_ : bool) -> fileExt // Extension will always be .wasm for WasmGc
+#if !FABLE_CORE_ONLY
         | _, true -> fileExt
         | _ -> ".fs" + fileExt
+#endif
 
     // Some Fable JS packages have native files with same name as the F# file
     // so we need to use the default extension .fs.js to prevent conflicts.
@@ -194,12 +202,9 @@ module File =
         dir
         =
         let tryParent () =
-            let parent = Directory.GetParent(dir)
-
-            if isNull parent then
-                None
-            else
-                tryFindNonEmptyDirectoryUpwards opts parent.FullName
+            match Option.ofObj (Directory.GetParent(dir)) with
+            | None -> None
+            | Some parent -> tryFindNonEmptyDirectoryUpwards opts parent.FullName
 
         let curDir = Path.GetFileName(dir)
 
@@ -226,12 +231,9 @@ module File =
         if File.Exists(filePath) then
             Some filePath
         else
-            let parent = Directory.GetParent(dir)
-
-            if isNull parent then
-                None
-            else
-                tryFindUpwards fileName parent.FullName
+            match Option.ofObj (Directory.GetParent(dir)) with
+            | None -> None
+            | Some parent -> tryFindUpwards fileName parent.FullName
 
     let rec tryFindPackageJsonDir dir =
         tryFindUpwards "package.json" dir
@@ -260,9 +262,10 @@ module File =
             else
                 let di = DirectoryInfo(pathName)
 
-                if not (isNull di.Parent) then
-                    Path.Combine(getExactPath di.Parent.FullName, di.Parent.GetFileSystemInfos(di.Name).[0].Name)
-                else
+                match Option.ofObj di.Parent with
+                | Some parent ->
+                    Path.Combine(getExactPath parent.FullName, parent.GetFileSystemInfos(di.Name).[0].Name)
+                | None ->
                     di.Name.ToUpper()
 
         // Path.GetFullPath have issues with paths wrapped in quotes
@@ -369,22 +372,26 @@ module Process =
             else
                 exec
 
-        Environment
-            .GetEnvironmentVariable("PATH")
-            .Split(
+        // Environment
+        //     .GetEnvironmentVariable("PATH")
+        //     .Split(
+        match Option.ofObj (Environment.GetEnvironmentVariable("PATH")) with
+        | None -> None
+        | Some pathEnv ->
+            pathEnv.Split(
                 if isWindows then
                     ';'
                 else
                     ':'
             )
-        |> Array.tryPick (fun dir ->
-            let execPath = IO.Path.Combine(dir, exec)
+            |> Array.tryPick (fun dir ->
+                let execPath = IO.Path.Combine(dir, exec)
 
-            if IO.File.Exists execPath then
-                Some execPath
-            else
-                None
-        )
+                if IO.File.Exists execPath then
+                    Some execPath
+                else
+                    None
+            )
 
     let findInPath (exec: string) =
         match tryFindInPath exec with
@@ -446,16 +453,17 @@ module Process =
         if isWindows () then
             Console.CancelKeyPress.AddHandler(ConsoleCancelEventHandler(fun _ _ -> runningProcess |> Option.iter kill))
 
-            let assemblyLoadContext =
-                getCurrentAssembly () |> Loader.AssemblyLoadContext.GetLoadContext
-
-            assemblyLoadContext.add_Unloading (fun _ -> runningProcess |> Option.iter kill)
+            match Option.ofObj (getCurrentAssembly () |> Loader.AssemblyLoadContext.GetLoadContext) with
+            | Some assemblyLoadContext ->
+                assemblyLoadContext.add_Unloading (fun _ -> runningProcess |> Option.iter kill)
+            | None -> ()
 
         fun (workingDir: string) (exePath: string) (args: string list) ->
             try
                 runningProcess |> Option.iter kill
-                let p = startProcess false envVars workingDir exePath args
-                runningProcess <- Some p
+                match Option.ofObj (startProcess false envVars workingDir exePath args) with
+                | Some p -> runningProcess <- Some p
+                | None -> ()
             with ex ->
                 Log.always ("Cannot run: " + ex.Message)
 
@@ -463,9 +471,11 @@ module Process =
 
     let runSyncWithEnv envVars (workingDir: string) (exePath: string) (args: string list) =
         try
-            let p = startProcess false envVars workingDir exePath args
-            p.WaitForExit()
-            p.ExitCode
+            match Option.ofObj (startProcess false envVars workingDir exePath args) with
+            | Some p ->
+                p.WaitForExit()
+                p.ExitCode
+            | None -> -1
         with ex ->
             Log.always ("Cannot run: " + ex.Message)
             Log.always (ex.StackTrace)
@@ -475,11 +485,13 @@ module Process =
         runSyncWithEnv [] workingDir exePath args
 
     let runSyncWithOutput workingDir exePath args =
-        let p = startProcess true [] workingDir exePath args
-        // Don't wait indefinitely to run process
-        // This call is used to build local plugins, if the binary is used by another process this process will never end.
-        p.WaitForExit 7000 |> ignore
-        p.StandardOutput.ReadToEnd()
+        match Option.ofObj (startProcess true [] workingDir exePath args) with
+        | Some p ->
+            // Don't wait indefinitely to run process
+            // This call is used to build local plugins, if the binary is used by another process this process will never end.
+            p.WaitForExit 7000 |> ignore
+            p.StandardOutput.ReadToEnd()
+        | None -> ""
 
 [<RequireQualifiedAccess>]
 module Async =
@@ -699,6 +711,7 @@ module ResultCE =
     let result = ResultBuilder()
 
 module Json =
+    #nowarn "3261" // TODO: FIXME: better way?
     open System.IO
     open System.Text.Json
     open System.Text.Json.Serialization

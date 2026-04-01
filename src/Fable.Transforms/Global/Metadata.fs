@@ -6,6 +6,7 @@ let coreAssemblies =
     [|
         "Fable.Core"
         "FSharp.Core"
+        "WasmGc.Core"
         "mscorlib"
         "netstandard"
         "System.Collections"
@@ -49,4 +50,5 @@ let isSystemPackage (pkgName: string) =
     || pkgName = "NETStandard.Library"
     || pkgName = "FSharp.Core"
     || pkgName = "Fable.Core"
+    || pkgName = "WasmGc.Core"
     || pkgName = "testhost"

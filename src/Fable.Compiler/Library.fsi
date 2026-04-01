@@ -1,6 +1,8 @@
 namespace Fable.Compiler
 
-open FSharp.Compiler.SourceCodeServices
+// CHANGED: removed `open FSharp.Compiler.SourceCodeServices` — InteractiveChecker
+// was previously compiled into the patched FCS and lived in that namespace.
+// It now lives here in Fable.Compiler, so no extra open is required.
 open FSharp.Compiler.Diagnostics
 open FSharp.Compiler.CodeAnalysis
 open Fable
@@ -58,8 +60,10 @@ module CodeServices =
         currentFile: string ->
             Async<FableASTResult>
 
-    /// And compile multiple files of a project to JavaScript.
-    /// The expected usage of this function is either every file in the project or only the user files.
+#if !FABLE_CORE_ONLY
+    /// Compile multiple files of a project to JavaScript.
+    /// The expected usage of this function is either every file in the project
+    /// or only the user files.
     val compileMultipleFilesToJavaScript:
         pathResolver: PathResolver ->
         cliArgs: CliArgs ->
@@ -69,7 +73,7 @@ module CodeServices =
             Async<CompileResult>
 
     /// Type-checks the project up until the last transitive dependent file.
-    /// Compile the current and the transitive dependent files to JavaScript.
+    /// Compiles the current and the transitive dependent files to JavaScript.
     val compileFileToJavaScript:
         sourceReader: SourceReader ->
         checker: InteractiveChecker ->
@@ -78,3 +82,4 @@ module CodeServices =
         crackerResponse: CrackerResponse ->
         currentFile: string ->
             Async<CompileResult>
+#endif

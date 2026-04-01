@@ -829,8 +829,9 @@ let compose (com: ICompiler) ctx r t (f1: Expr) (f2: Expr) =
 
     Let(capturedFun1Var, f1, Let(capturedFun2Var, f2, Lambda(arg, body, None)))
 
-let partialApplyAtRuntime (com: Compiler) t arity (expr: Expr) (partialArgs: Expr list) =
+let partialApplyAtRuntime (com: ICompilerCore) t arity (expr: Expr) (partialArgs: Expr list) =
     match com.Options.Language with
+#if !FABLE_CORE_ONLY
     | JavaScript
     | TypeScript
     | Dart
@@ -849,6 +850,7 @@ let partialApplyAtRuntime (com: Compiler) t arity (expr: Expr) (partialArgs: Exp
             match partialArgs with
             | [] -> curried
             | partialArgs -> curriedApply None t curried partialArgs
+#endif
     | _ ->
         // Check if argTypes.Length < arity?
         let makeArgIdent i typ = makeTypedIdent typ $"a%d{i}" // $"a{com.IncrementCounter()}$"
@@ -858,7 +860,7 @@ let partialApplyAtRuntime (com: Compiler) t arity (expr: Expr) (partialArgs: Exp
         let body = Helper.Application(expr, returnType, partialArgs @ args)
         makeLambda argIdents body
 
-let curryExprAtRuntime (com: Compiler) arity (expr: Expr) =
+let curryExprAtRuntime (com: ICompilerCore) arity (expr: Expr) =
     if arity = 1 then
         expr
     else
@@ -883,12 +885,13 @@ let curryExprAtRuntime (com: Compiler) arity (expr: Expr) =
             Helper.LibCall(com, "Option", "map", Option(curried.Type, isStruct), [ fn; expr ])
         | _ -> partialApplyAtRuntime com expr.Type arity expr []
 
-let uncurryExprAtRuntime (com: Compiler) arity (expr: Expr) =
+let uncurryExprAtRuntime (com: ICompilerCore) arity (expr: Expr) =
     let uncurry (expr: Expr) =
         // Check if argTypes.Length < arity?
         let argTypes, returnType = uncurryLambdaType arity [] expr.Type
 
         match com.Options.Language with
+#if !FABLE_CORE_ONLY
         | JavaScript
         | TypeScript
         | Dart
@@ -898,6 +901,7 @@ let uncurryExprAtRuntime (com: Compiler) arity (expr: Expr) =
             match com.Options.Language with
             | Python -> Helper.LibCall(com, "Curry", "uncurry", uncurriedType, [ makeNativeIntConst arity; expr ])
             | _ -> Helper.LibCall(com, "Util", $"uncurry%d{arity}", uncurriedType, [ expr ])
+#endif
         | _ ->
             // let makeArgIdent typ = makeTypedIdent typ $"a{com.IncrementCounter()}$"
             // let argIdents = argTypes |> List.map makeArgIdent
@@ -1466,10 +1470,9 @@ module AnonRecords =
 
     and [<return: Struct>] private (|UType|_|) (ty: FSharpType) =
         let (|UName|_|) (tdef: FSharpEntity) =
-            if
-                tdef.Namespace = Some "Fable.Core"
-                && (let name = tdef.DisplayName
-                    name.Length = 2 && name[0] = 'U' && Char.IsDigit name[1])
+            if (tdef.Namespace = Some "Fable.Core"|| tdef.Namespace = Some "WasmGc.Core")
+               && (let name = tdef.DisplayName
+               name.Length = 2 && name[0] = 'U' && Char.IsDigit name[1])
             then
                 Some()
             else

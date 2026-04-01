@@ -643,7 +643,8 @@ module Operators =
 
 [<AutoOpen>]
 module Extensions =
-    type System.Collections.Generic.Dictionary<'TKey, 'TValue> with
+    // F# 10: BCL Dictionary enforces 'TKey : not null; mirror constraint in extensions
+    type System.Collections.Generic.Dictionary<'TKey, 'TValue when 'TKey : not null> with
 
         member dic.GetOrAdd(key, addFn) =
             match dic.TryGetValue(key) with
@@ -929,15 +930,17 @@ module AST =
     // TODO: Improve this, see https://github.com/fable-compiler/Fable/issues/1659#issuecomment-445071965
     // This is mainly used for inlining so a computation or a reference to a mutable value are understood
     // as a side effects too (because we don't want to duplicate or change the order of execution)
-    let rec canHaveSideEffects (com: Compiler) =
+    let rec canHaveSideEffects (com: ICompilerCore) =
         function
         | Import _ -> false
         | Lambda _
         | Delegate _ -> false
         | TypeCast(e, _) ->
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | JavaScript
             | Python -> canHaveSideEffects com e
+#endif
             | _ -> true
         | Value(value, _) ->
             match value with
@@ -972,7 +975,9 @@ module AST =
             match kind with
             | OptionValue ->
                 match com.Options.Language with
+#if !FABLE_CORE_ONLY
                 | Dart -> canHaveSideEffects com e
+#endif
                 // Other languages include a runtime check for options
                 | _ -> true
             | ListHead
@@ -980,7 +985,11 @@ module AST =
             | TupleIndex _
             | UnionTag -> canHaveSideEffects com e
             // Don't move union field getters after union case test in case TypeScript complains
-            | UnionField _ -> com.Options.Language = TypeScript || canHaveSideEffects com e
+            | UnionField _ ->
+#if !FABLE_CORE_ONLY
+                com.Options.Language = TypeScript ||
+#endif
+                canHaveSideEffects com e
             | FieldGet info ->
                 if info.CanHaveSideEffects then
                     true
@@ -1194,8 +1203,9 @@ module AST =
             FableError $"Unexpected type %A{typ} for literal %O{value} (%s{value.GetType().FullName})"
             |> raise
 
-    let getLibPath (com: Compiler) (moduleName: string) =
+    let getLibPath (com: ICompilerCore) (moduleName: string) =
         match com.Options.Language with
+#if !FABLE_CORE_ONLY
         | Python ->
             // Python modules should be all lower case without any dots (PEP8)
             let moduleName' =
@@ -1232,6 +1242,8 @@ module AST =
                     "fable_" + (moduleName |> Naming.applyCaseRule Fable.Core.CaseRules.SnakeCase)
 
             com.LibraryDir + "/" + beamModuleName + ".erl"
+#endif
+        | WasmGc -> com.LibraryDir + "/" + moduleName + ".fs"
 
     let makeImportUserGenerated r t (selector: string) (path: string) =
         Import(
@@ -1244,9 +1256,10 @@ module AST =
             r
         )
 
-    let makeImportLibWithInfo (com: Compiler) t memberName (moduleName: string) info =
+    let makeImportLibWithInfo (com: ICompilerCore) t memberName (moduleName: string) info =
         let selector =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Rust ->
                 if
                     moduleName = "System"
@@ -1256,6 +1269,7 @@ module AST =
                     moduleName + "::" + memberName
                 else
                     moduleName + "_::" + memberName
+#endif
             | _ -> memberName
 
         Import(
@@ -1268,11 +1282,11 @@ module AST =
             None
         )
 
-    let makeImportLib (com: Compiler) t memberName moduleName =
+    let makeImportLib (com: ICompilerCore) t memberName moduleName =
         LibraryImportInfo.Create(isInstanceMember = false, isModuleMember = true)
         |> makeImportLibWithInfo com t memberName moduleName
 
-    let private makeInternalImport (com: Compiler) t (selector: string) (path: string) range kind =
+    let private makeInternalImport (com: ICompilerCore) t (selector: string) (path: string) range kind =
         let path =
             if com.CurrentFile = path then
                 "./" + Path.GetFileName(path)

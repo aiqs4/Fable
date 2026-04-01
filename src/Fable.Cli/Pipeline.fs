@@ -78,6 +78,7 @@ type Stream =
                     | true -> return false
         }
 
+#if !FABLE_CORE_ONLY
 module Js =
     type BabelWriter
         (com: Compiler, cliArgs: CliArgs, pathResolver: PathResolver, sourcePath: string, targetPath: string)
@@ -183,7 +184,9 @@ module Js =
                 // TODO: Check also if file has actually changed with other printers
                 do! writer.WriteToFileIfChanged()
         }
+#endif
 
+#if !FABLE_CORE_ONLY
 module Python =
     // PEP8: Modules should have short, all-lowercase names Note that Python modules
     // cannot contain dots or it will be impossible to import them
@@ -392,6 +395,9 @@ module Python =
                 | _ -> ()
         }
 
+#endif
+
+#if !FABLE_CORE_ONLY
 module Php =
     type PhpWriter(com: Compiler, cliArgs: CliArgs, pathResolver, targetPath: string) =
         let sourcePath = com.CurrentFile
@@ -431,7 +437,8 @@ module Php =
                 use writer = new PhpWriter(com, cliArgs, pathResolver, outPath)
                 do! PhpPrinter.run writer php
         }
-
+#endif
+#if !FABLE_CORE_ONLY
 module Dart =
     type DartWriter(com: Compiler, cliArgs: CliArgs, pathResolver, targetPath: string) =
         let sourcePath = com.CurrentFile
@@ -470,7 +477,9 @@ module Dart =
                 use writer = new DartWriter(com, cliArgs, pathResolver, outPath)
                 do! DartPrinter.run writer file
         }
+#endif
 
+#if !FABLE_CORE_ONLY
 module Rust =
     open Fable.Transforms.Rust
 
@@ -526,7 +535,9 @@ module Rust =
                 use writer = new RustWriter(com, cliArgs, pathResolver, outPath)
                 do! RustPrinter.run writer crate
         }
+#endif
 
+#if !FABLE_CORE_ONLY
 module Beam =
     // Module naming lives in Fable.Transforms so the code generator and the CLI agree on the
     // name of every generated module — an Erlang module's file name must match its `-module`
@@ -568,13 +579,21 @@ module Beam =
                 use writer = new BeamWriter(com, outPath)
                 do! ErlangPrinter.run writer erlModule
         }
+#endif
+
+module WasmGc =
+    let compileFile (com: Compiler) (cliArgs: CliArgs) _pathResolver isSilent (outPath: string) =
+        WasmGc.Pipeline.compileFile com cliArgs.ProjectFile isSilent outPath
 
 let compileFile (com: Compiler) (cliArgs: CliArgs) pathResolver isSilent (outPath: string) =
     match com.Options.Language with
+#if !FABLE_CORE_ONLY
     | JavaScript
     | TypeScript -> Js.compileFile com cliArgs pathResolver isSilent outPath
     | Python -> Python.compileFile com cliArgs pathResolver isSilent outPath
     | Php -> Php.compileFile com cliArgs pathResolver isSilent outPath
     | Dart -> Dart.compileFile com cliArgs pathResolver isSilent outPath
     | Rust -> Rust.compileFile com cliArgs pathResolver isSilent outPath
-    | Beam -> Beam.compileFile com isSilent outPath
+    | Beam -> Beam.compileFile com cliArgs pathResolver isSilent outPath
+#endif
+    | WasmGc -> WasmGc.compileFile com cliArgs pathResolver isSilent outPath
