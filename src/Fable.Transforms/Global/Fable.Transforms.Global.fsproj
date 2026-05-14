@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <!-- <TargetFramework Condition="'$(FableCoreVersion)' == ''">netstandard2.0</TargetFramework>
+    <TargetFramework Condition="'$(FableCoreVersion)' != ''">$(FableCoreVersion)</TargetFramework> -->
+    <TargetFramework>net10.0</TargetFramework>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- <ProjectReference Include="../../Fable.Core/Fable.Core.fsproj" /> -->
+    <!-- <ProjectReference Include="../../Fable.Compiler/Fable.Compiler.fsproj" /> -->
+    <!-- <ProjectReference Include="../../Fable.Cli/Fable.Cli.fsproj" /> -->
+    <!-- <ProjectReference Include="../Fable.Transforms/Fable.Transforms.fsproj" /> -->
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Fable.Core.fs" />
+    <Compile Include="Metadata.fs" />
+    <Compile Include="Prelude.fs" />
+    <Compile Include="Compiler.fs" />
+    <Compile Include="Naming.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../Fable.AST/Fable.AST.fsproj" />
+  </ItemGroup>
+</Project>

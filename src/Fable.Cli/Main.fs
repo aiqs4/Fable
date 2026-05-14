@@ -5,10 +5,10 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Diagnostics
-open FSharp.Compiler.SourceCodeServices
 open FSharp.Compiler.Symbols
 
 open Fable
+open Fable.Compiler
 open Fable.AST
 open Fable.Transforms
 open Fable.Transforms.State

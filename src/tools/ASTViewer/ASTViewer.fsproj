@@ -10,6 +10,5 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Dotnet.ProjInfo" Version="0.44.0" />
-    <Reference Include="../../../lib/fcs/FSharp.Compiler.Service.dll" />
   </ItemGroup>
 </Project>
