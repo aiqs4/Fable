@@ -25,12 +25,12 @@ type CompilerOptionsHelper =
         )
         =
         {
-            CompilerOptions.Define           = defaultArg define []
-            DebugMode                        = defaultArg debugMode true
+            CompilerOptions.Define = defaultArg define []
+            DebugMode = defaultArg debugMode true
 #if !FABLE_CORE_ONLY
-            Language                         = defaultArg language JavaScript
+            Language = defaultArg language JavaScript
 #else
-            Language                         = defaultArg language WasmGc
+            Language = defaultArg language WasmGc
 #endif
             FileExtension = defaultArg fileExtension ".fs.js"
             TypedArrays = defaultArg typedArrays true
@@ -42,12 +42,12 @@ type CompilerOptionsHelper =
             JsTemporal = defaultArg jsTemporal false
         }
 
-[<RequireQualifiedAccess>]
-[<Struct>]
-type Severity =
-    | Warning
-    | Error
-    | Info
+// [<RequireQualifiedAccess>]
+// [<Struct>]
+// type Severity =
+//     | Warning
+//     | Error
+//     | Info
 
 [<RequireQualifiedAccess>]
 [<Struct>]
@@ -69,8 +69,6 @@ type InlineExpr =
         IsFileLocal: bool
     }
 
-type CompilerPlugins = { MemberDeclarationPlugins: Map<Fable.EntityRef, System.Type> }
-
 type SourceReader = string -> int * Lazy<string>
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -85,14 +83,11 @@ type Compiler =
     // TryGetPluginHelper, IncrementCounter, AddLog  ← all from ICompilerCore.
 
     // ── FCS-specific members ──────────────────────────────────────────────────
-    abstract OutputDir  : string option
-    abstract OutputType : OutputType
+    abstract OutputDir: string option
+    abstract OutputType: OutputType
     abstract ProjectFile: string
     abstract ProjectOptions: FSharpProjectOptions
     abstract SourceFiles: string array
-    abstract Options: CompilerOptions
-    abstract Plugins: CompilerPlugins
-    abstract IncrementCounter: unit -> int
     abstract IsPrecompilingInlineFunction: bool
     abstract WillPrecompileInlineFunction: file: string -> Compiler
 

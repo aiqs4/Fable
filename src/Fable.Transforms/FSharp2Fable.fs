@@ -62,6 +62,7 @@ let private transformBaseConsCall
         // Other cases, like Emit will call directly the base expression
         | e -> e
 
+#if !FABLE_CORE_ONLY
 /// A `[<StringEnum>]` case as an Erlang atom.
 ///
 /// `[<StringEnum>]` means "a closed set of string-literal constants for interop", and the Beam
@@ -92,11 +93,14 @@ let private transformStringEnumAsAtom (rule: Fable.Core.CaseRules) (unionCase: F
         match unionCase.Attributes |> tryFindAttrib Atts.emitAttr with
         | Some _ -> transformStringEnum rule unionCase
         | None -> Naming.applyCaseRule rule unionCase.Name |> atom
+#endif
 
 /// The value a `[<StringEnum>]` case compiles to: an atom on Beam, a string literal everywhere else.
 let private transformStringEnumCase (com: Compiler) (rule: Fable.Core.CaseRules) (unionCase: FSharpUnionCase) =
     match com.Options.Language with
+#if !FABLE_CORE_ONLY
     | Beam -> transformStringEnumAsAtom rule unionCase
+#endif
     | _ -> transformStringEnum rule unionCase
 
 let private transformNewUnion com ctx r fsType (unionCase: FSharpUnionCase) (argExprs: Fable.Expr list) =

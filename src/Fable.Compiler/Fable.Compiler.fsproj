@@ -32,7 +32,6 @@
     <ItemGroup>
         <ProjectReference Include="../Fable.AST/Fable.AST.fsproj" />
         <ProjectReference Include="../Fable.Transforms/Fable.Transforms.fsproj" PrivateAssets="all" />
-        <ProjectReference Include="../Fable.Transforms/Babel/Fable.Transforms.Babel.fsproj" PrivateAssets="all" />
     </ItemGroup>
 
     <!--
@@ -52,18 +51,12 @@
         reproducible.  Update the version when you pull in a new F# toolchain.
     -->
     <ItemGroup>
-        <!--
-            FSharp.Core is transitively brought in by FSharp.Compiler.Service.
-            We keep it explicit so we control the version and can set
-            DisableImplicitFSharpCoreReference above.
-        -->
-        <!-- <PackageReference Include="FSharp.Core"             Version="10.1.203" /> -->
-        <PackageReference Include="FSharp.Core"             Version="10.0.300" />
-        <!--
-            The main FCS package.  Includes the compiler, symbol APIs, and the
-            FSharpChecker public surface that InteractiveChecker.fs now uses.
-        -->
-        <PackageReference Include="FSharp.Compiler.Service" Version="43.12.203" />
+        <!-- F# 10.1 -->
+        <!-- <PackageReference Include="FSharp.Core" Version="10.1.204" /> -->
+        <!-- <PackageReference Include="FSharp.Compiler.Service" Version="43.12.204" /> -->
+        <!-- F# 11 -->
+        <!-- <PackageReference Include="FSharp.Core" Version="11.0.100" /> -->
+        <PackageReference Include="FSharp.Compiler.Service" Version="43.12.100" />
         <!--
             DependencyManager is a separate package in recent FCS releases.
             It is still needed for script resolution inside FSharpChecker.
@@ -79,6 +72,7 @@
         <PackageReference Include="FSharp.SystemTextJson" Version="1.4.36" />
         <PackageReference Include="Thoth.Json.Core.Auto" Version="0.1.1" />
         <PackageReference Include="Thoth.Json.System.Text.Json" Version="0.4.0" />
+        <!-- In the net11 shared framework. Referencing it raises NU1510. -->
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     </ItemGroup>
 
@@ -96,8 +90,6 @@
         <None Include="$(OutputPath)FSharp.DependencyManager.Nuget.xml" Pack="true" PackagePath="lib/$(TargetFramework)" />
         <None Include="$(OutputPath)Fable.Transforms.dll" Pack="true" PackagePath="lib/$(TargetFramework)" />
         <None Include="$(OutputPath)Fable.Transforms.xml" Pack="true" PackagePath="lib/$(TargetFramework)" />
-        <None Include="$(OutputPath)Fable.Transforms.Babel.dll" Pack="true" PackagePath="lib/$(TargetFramework)" />
-        <None Include="$(OutputPath)Fable.Transforms.Babel.xml" Pack="true" PackagePath="lib/$(TargetFramework)" />
     </ItemGroup>
 
 </Project>

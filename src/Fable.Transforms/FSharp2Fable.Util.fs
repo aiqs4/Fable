@@ -397,10 +397,7 @@ type FsEnt(maybeAbbrevEnt: FSharpEntity) =
                 match dllName with
                 // When compiling with netcoreapp target, netstandard only contains redirects
                 // We can find the actual assembly name from the entity qualified name
-                | "netstandard" ->
-                    ent.QualifiedName
-                    |> Option.map (fun qn -> qn.Split(',').[1].Trim() |> Fable.CoreAssemblyName)
-                    |> Option.defaultValue (Fable.CoreAssemblyName ent.DisplayName) // Fallback to entity name
+                | "netstandard" -> ent.QualifiedName.Split(',').[1].Trim() |> Fable.CoreAssemblyName
                 | Naming.fablePrecompile ->
                     let sourcePath = FsEnt.SourcePath ent
                     Fable.PrecompiledLib(sourcePath, Path.normalizePath asmPath)
@@ -835,7 +832,9 @@ module Helpers =
         // existing bindings when camelCase is converted to snake_case.
         let name =
             match com.Options.Language with
+#if !FABLE_CORE_ONLY
             | Python -> Fable.Py.Naming.toPythonNaming name
+#endif
             | _ -> name
 
         let sanitizeIdent =
@@ -1728,7 +1727,11 @@ module TypeHelpers =
                 | Choice1Of2 t -> t
                 | Choice2Of2 fullName -> makeRuntimeTypeWithMeasure genArgs fullName
             | fullName when tdef.IsMeasure -> Fable.Measure fullName
-            | _ when hasAttrib Atts.stringEnum tdef.Attributes && Compiler.Language <> TypeScript -> Fable.String
+            | _ when hasAttrib Atts.stringEnum tdef.Attributes
+#if !FABLE_CORE_ONLY
+                     && Compiler.Language <> TypeScript
+#endif
+                -> Fable.String
             | _ ->
                 let genArgs = makeTypeGenArgsWithConstraints withConstraints ctxTypeArgs genArgs
 
@@ -2876,8 +2879,12 @@ module Util =
             | Some _ ->
                 // Deal with reraise so we don't need to save caught exception every time
                 match ctx.CaughtException, info.DeclaringEntityFullName, info.CompiledName with
-                | Some ex, "Microsoft.FSharp.Core.Operators", "Reraise" when com.Options.Language <> Dart ->
-                    makeThrow r typ (Fable.IdentExpr ex) |> Some
+                | Some ex, "Microsoft.FSharp.Core.Operators", "Reraise"
+#if !FABLE_CORE_ONLY
+                    when com.Options.Language <> Dart
+#endif
+                    ->
+                    makeThrow r typ (Fable.IdentExpr ex) |> ValueSome
                 | _ ->
                     // If it's an interface compile the call to the attached member just in case
                     let attachedCall =
@@ -2992,17 +2999,23 @@ module Util =
                 // and emit a property access on a member that does not exist.
                 // Skipping it lets the call fall through to the `Inlined` pattern.
                 | None when
-                    com.Options.Language <> Rust
-                    && (isAttachMembersEntity com e || isPojoDefinedByConsArgsFSharpEntity e)
+#if !FABLE_CORE_ONLY
+                    com.Options.Language <> Rust &&
+#endif
+                    (isAttachMembersEntity com e || isPojoDefinedByConsArgsFSharpEntity e)
                     ->
                     let classExpr = FsEnt.Ref e |> entityIdent com
 
+#if !FABLE_CORE_ONLY
                     // In Python the union type alias carries no members, so attached static
                     // members must be accessed on the private base class.
                     if com.Options.Language = Python && e.IsFSharpUnion then
                         redirectUnionToPythonBaseClass classExpr |> Some
                     else
                         Some classExpr
+#else
+                    Some classExpr
+#endif
                 | None -> None
 
             match moduleOrClassExpr, callInfo.ThisArg with
@@ -3288,8 +3301,9 @@ module Util =
 
         | _, Some entity when isModuleValueForCalls com entity memb ->
             let typ = makeType ctx.GenericArgs memb.FullType
-            memberIdent com r typ memb membRef
+            memberIdent com ctx r typ memb membRef
 
+#if !FABLE_CORE_ONLY
         // (optional, Dart only) Call the implicit constructor instead of the mangled one
         | _, Some entity when com.Options.Language = Dart && memb.IsImplicitConstructor ->
             let classExpr = FsEnt.Ref entity |> entityIdent com

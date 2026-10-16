@@ -408,7 +408,11 @@ and private emitQuotedValue (com: Compiler) (bound: Set<string>) (kind: ValueKin
         let emittedValues =
             mkExprArray com (values |> List.map (emitQuotedExprIn com bound))
 
+#if !FABLE_CORE_ONLY
         if com.Options.Language = Rust then
+#else
+        if com.Options.Language = WasmGc then
+#endif
             // Rust needs the case name to build a real UnionCaseInfo; other targets keep (name, tag, fields).
             let caseName =
                 match com.TryGetEntity(entRef) with
@@ -440,7 +444,11 @@ and private emitQuotedValue (com: Compiler) (bound: Set<string>) (kind: ValueKin
         let emittedValues =
             mkExprArray com (values |> List.map (emitQuotedExprIn com bound))
 
+#if !FABLE_CORE_ONLY
         if com.Options.Language = Rust then
+#else
+        if com.Options.Language = WasmGc then
+#endif
             // Rust needs the record type name; other targets keep (fieldNames, values).
             let typeName =
                 match com.TryGetEntity(entRef) with
@@ -451,7 +459,11 @@ and private emitQuotedValue (com: Compiler) (bound: Set<string>) (kind: ValueKin
         else
             Helper.LibCall(com, "quotation", "mkNewRecord", Any, [ fieldNames; emittedValues ])
 
-    | NewOption(value, _typ, _isStruct) when com.Options.Language = Rust ->
+    | NewOption(value, _typ, _isStruct)
+#if !FABLE_CORE_ONLY
+       when com.Options.Language = Rust
+#endif
+       ->
         // Rust models option construction as F# quotations do: a NewUnionCase of FSharpOption`1
         // (None = tag 0, Some = tag 1), so `<@ Some x @>` matches the NewUnionCase active pattern.
         let optName = "Microsoft.FSharp.Core.FSharpOption`1"
@@ -478,12 +490,14 @@ and private emitQuotedValue (com: Compiler) (bound: Set<string>) (kind: ValueKin
                 [ makeStrConst optName; makeIntConst 0; makeStrConst "None"; emitted ]
             )
 
+#if !FABLE_CORE_ONLY
     | NewOption(value, _typ, _isStruct) ->
         match value with
         | Some v ->
             let emitted = emitQuotedExprIn com bound v
             Helper.LibCall(com, "quotation", "mkValue", Any, [ emitted; makeStrConst "option" ])
         | None -> mkNullExpr com "option"
+#endif
 
     | NewList(headAndTail, _typ) ->
         match headAndTail with
@@ -556,7 +570,9 @@ and private makeArray (elementType: Type) (elements: Expr list) : Expr =
 // FSharpExpr[], so route empty arrays through a runtime helper instead; other targets are unaffected.
 and private mkExprArray (com: Compiler) (elements: Expr list) : Expr =
     match elements with
+#if !FABLE_CORE_ONLY
     | [] when com.Options.Language = Rust -> Helper.LibCall(com, "quotation", "emptyExprArray", Any, [])
+#endif
     | _ -> makeArray Any elements
 
 /// Entry point. Nothing is bound at the top of a quotation, so any identifier

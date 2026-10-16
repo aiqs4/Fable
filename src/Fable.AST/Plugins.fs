@@ -7,7 +7,6 @@ open Fable.AST.Fable
 // Fundamental enums — must live here so ICompilerCore can reference them without
 // depending on the Fable.Transforms assembly.
 // ──────────────────────────────────────────────────────────────────────────────
-
 [<RequireQualifiedAccess>]
 type Verbosity =
     | Normal
@@ -17,6 +16,7 @@ type Verbosity =
 /// Diagnostic severity, moved from Compiler.fs so ICompilerCore.AddLog can use it
 /// without a circular assembly dependency.
 [<RequireQualifiedAccess>]
+[<Struct>]
 type Severity =
     | Warning
     | Error
@@ -66,22 +66,20 @@ type CompilerOptions =
 // Plugin infrastructure
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Plugin dispatch table, keyed by EntityRef (attribute type).
-/// Moved from Compiler.fs so ICompilerCore.Plugins can reference it from Fable.AST.
-type CompilerPlugins = { MemberDeclarationPlugins: Map<EntityRef, System.Type> }
+type CompilerPlugins = { MemberDeclarationPlugins: Map<Fable.EntityRef, System.Type> }
 
 type PluginHelper =
-    abstract LibraryDir  : string
-    abstract CurrentFile : string
-    abstract OutputDir   : string option
-    abstract ProjectFile : string
-    abstract SourceFiles : string seq
-    abstract Options     : CompilerOptions
-    abstract LogWarning  : string * ?range: SourceLocation -> unit
-    abstract LogError    : string * ?range: SourceLocation -> unit
+    abstract LibraryDir: string
+    abstract CurrentFile: string
+    abstract OutputDir: string option
+    abstract ProjectFile: string
+    abstract SourceFiles: string seq
+    abstract Options: CompilerOptions
+    abstract LogWarning: string * ?range: SourceLocation -> unit
+    abstract LogError: string * ?range: SourceLocation -> unit
     abstract GetRootModule: fileName: string -> string
-    abstract GetEntity  : EntityRef -> Entity
-    abstract GetMember  : MemberRef -> MemberFunctionOrValue
+    abstract GetEntity: EntityRef -> Entity
+    abstract GetMember: MemberRef -> MemberFunctionOrValue
     abstract GetOutputPath: unit -> string
     abstract GetOutputPath: file: string -> string
 
@@ -97,7 +95,7 @@ type PluginAttribute() =
 [<AbstractClass>]
 type MemberDeclarationPluginAttribute() =
     inherit PluginAttribute()
-    abstract Transform    : PluginHelper * File * MemberDecl -> MemberDecl
+    abstract Transform: PluginHelper * File * MemberDecl -> MemberDecl
     abstract TransformCall: PluginHelper * member_: MemberFunctionOrValue * expr: Expr -> Expr
 
 // ──────────────────────────────────────────────────────────────────────────────
