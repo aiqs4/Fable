@@ -24,16 +24,18 @@ type CompilerOptionsHelper =
             ?jsTemporal
         )
         =
+#if !FABLE_CORE_ONLY
+        let language = defaultArg language JavaScript
+#else
+        let language = defaultArg language WasmGc
+#endif
         {
             CompilerOptions.Define = defaultArg define []
             DebugMode = defaultArg debugMode true
-#if !FABLE_CORE_ONLY
-            Language = defaultArg language JavaScript
-#else
-            Language = defaultArg language WasmGc
-#endif
+            Language = language
             FileExtension = defaultArg fileExtension ".fs.js"
-            TypedArrays = defaultArg typedArrays true
+            // JS typed arrays (Int32Array, ...) don't exist on WasmGc: Replacements injects them as global idents.
+            TypedArrays = defaultArg typedArrays (language <> WasmGc)
             OptimizeFSharpAst = defaultArg optimizeFSharpAst false
             Verbosity = defaultArg verbosity Verbosity.Normal
             ClampByteArrays = defaultArg clampByteArrays false

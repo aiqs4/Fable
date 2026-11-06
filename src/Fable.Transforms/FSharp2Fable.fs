@@ -1646,8 +1646,17 @@ let private transformExpr (com: IFableCompiler) (ctx: Context) appliedGenArgs fs
                     "Mutating this argument passed by reference is not supported"
                     |> addErrorAndReturnNull com ctx.InlinePath r
 
+        // `this` of a delegating secondary-constructor call (`new() = C(...)`, `new(..) as this = C(..) then ...`)
+        // is surfaced by FCS as `ldarg.0`. Treat it like ThisValue.
+        | FSharpExprPatterns.ILAsm("[I_ldarg 0us]", _, []) ->
+            let r = makeRangeFrom fsExpr
+
+            return
+                match ctx.BoundConstructorThis with
+                | Some i -> identWithRange r i |> Fable.IdentExpr
+                | None -> Fable.Value(makeType Map.empty fsExpr.Type |> Fable.ThisValue, r)
+
         // | FSharpExprPatterns.ILFieldSet _
-        // | FSharpExprPatterns.ILAsm _
         | expr ->
             return
                 $"Cannot compile expression %A{expr}"
@@ -2914,9 +2923,9 @@ type FableCompiler(com: Compiler) =
         let ctx =
             { ctx with
                 CapturedBindings =
-                    // if isNull ctx.CapturedBindings then
-                    //     HashSet()
-                    // else
+                    if isNull ctx.CapturedBindings then
+                        HashSet()
+                    else
                         ctx.CapturedBindings
             }
 
