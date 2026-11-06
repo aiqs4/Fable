@@ -4,7 +4,6 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Fable.AST/Fable.AST.fsproj" />
-    <Project Path="src/Fable.Cli/Fable.Cli.fsproj" />
     <Project Path="src/Fable.Compiler/Fable.Compiler.fsproj" />
     <Project Path="src/Fable.Core/Fable.Core.fsproj" />
     <Project Path="src/Fable.Transforms/Fable.Transforms.fsproj" />
