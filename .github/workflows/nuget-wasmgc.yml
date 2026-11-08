@@ -1,0 +1,86 @@
+# Packs Fable.AST, Fable.Transforms, Fable.Transforms.Global and Fable.Compiler
+# (plus Rust.AST when that project is in the tree) and publishes the .nupkg
+# files as a GitHub Release. Runs only for pushes to feature/wasmgc-backend.
+name: NuGet artifacts (wasmgc)
+
+on:
+  push:
+    branches:
+      - feature/wasmgc-backend
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nuget-wasmgc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Pack NuGet packages
+        run: nix run .#pack -- artifacts/nuget
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fable-wasmgc-nugets
+          if-no-files-found: error
+          path: |
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/fable-wasmgc-nugets.zip
+            artifacts/nuget/version.txt
+            artifacts/nuget/README.txt
+            artifacts/nuget/nuget.config
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(cat artifacts/nuget/version.txt)
+          tag="wasmgc-nuget-${version}"
+          notes=artifacts/nuget/RELEASE.md
+          shopt -s nullglob
+          files=(
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/fable-wasmgc-nugets.zip
+            artifacts/nuget/version.txt
+            artifacts/nuget/README.txt
+            artifacts/nuget/nuget.config
+          )
+          if ((${#files[@]} == 0)); then
+            echo "no release files" >&2
+            exit 1
+          fi
+
+          gh release create "$tag" "${files[@]}" \
+            --target "$GITHUB_SHA" \
+            --title "Fable NuGet ${version}" \
+            --notes-file "$notes" \
+            --prerelease
+
+          if gh release view wasmgc-nuget >/dev/null 2>&1; then
+            gh release upload wasmgc-nuget "${files[@]}" --clobber
+            gh release edit wasmgc-nuget \
+              --title "Fable WasmGC NuGet (latest)" \
+              --notes-file "$notes" \
+              --latest
+          else
+            gh release create wasmgc-nuget "${files[@]}" \
+              --target "$GITHUB_SHA" \
+              --title "Fable WasmGC NuGet (latest)" \
+              --notes-file "$notes" \
+              --latest
+          fi
+
+          git tag -f wasmgc-nuget "$GITHUB_SHA"
+          git push origin refs/tags/wasmgc-nuget --force \
+            || echo "warning: could not move tag wasmgc-nuget; release assets were still uploaded"
