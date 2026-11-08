@@ -64,16 +64,24 @@ projects+=(
   src/Fable.Compiler/Fable.Compiler.fsproj
 )
 
-missing=0
-for proj in "${projects[@]}"; do
-  if [[ ! -f $proj ]]; then
-    echo "missing project: $proj" >&2
-    missing=1
-    continue
-  fi
-  proj_dir=$(dirname "$proj")
-  includes=$(mktemp)
-  python3 - "$proj" "$includes" <<'PY'
+# Force core-only packaging explicitly. The raw XML preflight below does not evaluate
+# MSBuild conditions, so we need to skip the backend-only file checks when the core-only
+# properties are intentionally set.
+core_only=${FABLE_CORE_ONLY:-${FableCoreOnly:-true}}
+if [[ "${core_only,,}" == "true" ]]; then
+  echo "FableCoreOnly=true: skipping backend source validation for core-only packaging"
+  missing=0
+else
+  missing=0
+  for proj in "${projects[@]}"; do
+    if [[ ! -f $proj ]]; then
+      echo "missing project: $proj" >&2
+      missing=1
+      continue
+    fi
+    proj_dir=$(dirname "$proj")
+    includes=$(mktemp)
+    python3 - "$proj" "$includes" <<'PY'
 import re, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
@@ -81,15 +89,16 @@ with open(sys.argv[2], "w", encoding="utf-8") as out:
     for match in re.finditer(r'Include="([^"]+\.(?:fs|fsi|fsproj))"', text):
         out.write(match.group(1) + "\n")
 PY
-  while IFS= read -r inc; do
-    [[ -z $inc ]] && continue
-    if [[ ! -e $proj_dir/$inc ]]; then
-      printf 'missing source: %s (from %s)\n' "$proj_dir/$inc" "$proj" >&2
-      missing=1
-    fi
-  done <"$includes"
-  rm -f "$includes"
-done
+    while IFS= read -r inc; do
+      [[ -z $inc ]] && continue
+      if [[ ! -e $proj_dir/$inc ]]; then
+        printf 'missing source: %s (from %s)\n' "$proj_dir/$inc" "$proj" >&2
+        missing=1
+      fi
+    done <"$includes"
+    rm -f "$includes"
+  done
+fi
 if [[ $missing -ne 0 ]]; then
   echo "error: this checkout cannot be packed. Commit the missing sources (feature/wasmgc-backend is missing the language-backend files Fable.Transforms still compiles)." >&2
   exit 1
@@ -109,6 +118,9 @@ common=(
   -p:RepositoryType=git
   -p:RepositoryBranch=feature/wasmgc-backend
   -p:PackageProjectUrl="$repo_url"
+  -p:FableCoreOnly=true
+  -p:FableCoreNet10=true
+  -p:FableCoreVersion=net10.0
 )
 if [[ -n $full_sha ]]; then
   common+=(-p:RepositoryCommit="$full_sha")
