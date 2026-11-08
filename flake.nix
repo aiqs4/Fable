@@ -11,10 +11,12 @@
       sdkVersion = "10.0.403";
       sdkBySystem = {
         x86_64-linux = {
-          url = "https://download.visualstudio.microsoft.com/download/pr/2b94f7b4-9ffd-419f-b38d-2e16ebd31eee/04ea4379e2c9af0b8f2c7af062bdb555ad6ba65cfab9c7d26e7f4370b8dd3063/dotnet-sdk-${sdkVersion}-linux-x64.tar.gz";
+          url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/${sdkVersion}/dotnet-sdk-${sdkVersion}-linux-x64.tar.gz";
+          hash = "sha512:b7b3d8461cf98b07d2552ce9199702fa3ad010ac2671a5f8cd5136f7534e50f6855ba7bbb02b11494563f1d04156276a31cda1103b900e5eecd0d9473dc7b9c5";
         };
         aarch64-linux = {
-          url = "https://download.visualstudio.microsoft.com/download/pr/60e64c2b-c87d-403e-b4b7-a27aa0b1c1e6/42a25e5b4b0e54a2e8e4bcf59e0e2b0f9812cef2a8c978c4e65ca2a0a6c5936d/dotnet-sdk-${sdkVersion}-linux-arm64.tar.gz";
+          url = "https://builds.dotnet.microsoft.com/dotnet/Sdk/${sdkVersion}/dotnet-sdk-${sdkVersion}-linux-arm64.tar.gz";
+          hash = "sha512:0966aa2b70f4677b8319be9df447a78a0dcd6164836425b55a68fd714f4023feb87b4cac21b9a996b79472ad54487cd0adcd2a9dfd570e2b2a1d26423a2baa9b";
         };
       };
       systems = builtins.attrNames sdkBySystem;
